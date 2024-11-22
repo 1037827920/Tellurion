@@ -1,0 +1,26 @@
+pointLights:
+  - position: { x: 0.7, y: 0.2, z: 10.0 }
+    constant: 1.0
+    linear: 0.09
+    quadratic: 0.032
+    ambient: { x: 0.05, y: 0.05, z: 0.05 }
+    diffuse: { x: 0.8, y: 0.8, z: 0.8 }
+    specular: { x: 1.0, y: 1.0, z: 1.0 }
+    lightColor: { x: 1.0, y: 1.0, z: 1.0 }
+  - position: { x: 5.0, y: -5.3, z: -4.0 }
+    constant: 1.0
+    linear: 0.09
+    quadratic: 0.032
+    ambient: { x: 0.05, y: 0.05, z: 0.05 }
+    diffuse: { x: 0.8, y: 0.8, z: 0.8 }
+    specular: { x: 1.0, y: 1.0, z: 1.0 }
+    lightColor: { x: 1.0, y: 1.0, z: 1.0 }
+  - position: { x: 6.3, y: 9.3, z: -5.0 }
+    constant: 1.0
+    linear: 0.09
+    quadratic: 0.032
+    ambient: { x: 0.05, y: 0.05, z: 0.05 }
+    diffuse: { x: 0.8, y: 0.8, z: 0.8 }
+    specular: { x: 1.0, y: 1.0, z: 1.0 }
+    lightColor: { x: 1.0, y: 1.0, z: 1.0 }
+  # ... and so on for each point light

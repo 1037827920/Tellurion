@@ -1,0 +1,13 @@
+models:
+  # - path: "./assets/X/X.fbx"
+  #   position: { x: 0.0, y: 0.0, z: 0.0 }
+  #   rotation: { x: -90.0, y: 0.0, z: 0.0 }
+  #   scale: { x: 0.1, y: 0.1, z: 0.1 }
+  # - path: "./assets/sphere2/sphere2.obj"
+  #   position: { x: 10.0, y: 0.0, z: -3.0 }
+  #   rotation: { x: 0.0, y: 0.0, z: 0.0 }
+  #   scale: { x: 5.0, y: 5.0, z: 5.0 }
+  - path: "./assets/sphere/sphere.obj"
+    position: { x: 0.0, y: 0.0, z: -3.0 }
+    rotation: { x: 0.0, y: 0.0, z: 0.0 }
+    scale: { x: 5.0, y: 5.0, z: 5.0 }

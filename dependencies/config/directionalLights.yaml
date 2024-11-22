@@ -1,0 +1,11 @@
+directionalLights:
+  - direction: { x: 0.0, y: 0.0, z: -1.0 }
+    ambient: { x: 0.2, y: 0.2, z: 0.2 }
+    diffuse: { x: 0.5, y: 0.5, z: 0.5 }
+    specular: { x: 1.0, y: 1.0, z: 1.0 }
+    lightColor: { x: 1.0, y: 1.0, z: 1.0 }
+  - direction: { x: 0.0, y: 0.0, z: 1.0 }
+    ambient: { x: 0.2, y: 0.2, z: 0.2 }
+    diffuse: { x: 0.5, y: 0.5, z: 0.5 }
+    specular: { x: 1.0, y: 1.0, z: 1.0 }
+    lightColor: { x: 1.0, y: 1.0, z: 1.0 }
