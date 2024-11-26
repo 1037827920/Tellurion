@@ -4,7 +4,7 @@
 #include <GLFW/glfw3.h>
 #include <functional>
 #include <iostream>
-#include "quaternionCamera.h"
+#include "QuaternionCamera.h"
 
 using std::cout;
 using std::endl;
@@ -12,6 +12,7 @@ using std::endl;
 class GLFWWindowFactory {
 public:
     static bool blinn;
+    static bool blinnKeyPressed; // 添加一个标志位
     // 默认构造函数
     GLFWWindowFactory() {}
     // 构造函数，初始化窗口
@@ -159,6 +160,16 @@ public:
             camera.ProcessKeyboard(ROLL_LEFT, deltaTime);
         if (glfwGetKey(window, GLFW_KEY_O) == GLFW_PRESS)
             camera.ProcessKeyboard(ROLL_RIGHT, deltaTime);
+
+        // 当按下键1时，切换Blinn-Phong着色模式
+        if (glfwGetKey(window, GLFW_KEY_1) == GLFW_PRESS) {
+            if (!blinnKeyPressed) {
+                blinn = !blinn;
+                blinnKeyPressed = true;
+            }
+        } else {
+            blinnKeyPressed = false;
+        }
     }
 
     // 获取投影矩阵

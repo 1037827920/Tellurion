@@ -1,4 +1,4 @@
-#include "windowFactory.h"
+#include "WindowFactory.h"
 
 Camera GLFWWindowFactory::camera = Camera(glm::vec3(0.0f, 0.0f, 3.0f));
 
@@ -13,3 +13,4 @@ float GLFWWindowFactory::deltaTime = 0.0f;
 // 初始化上一帧的时间
 float GLFWWindowFactory::lastFrame = 0.0f;
 bool GLFWWindowFactory::blinn = false;
+bool GLFWWindowFactory::blinnKeyPressed = false;

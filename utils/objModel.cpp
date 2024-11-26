@@ -19,11 +19,16 @@ void Model::draw(Shader& shader) {
     shader.setInt("material.texture", 0);
 
     // 设置法线贴图
-    shader.setBool("material.sampleNormalMap", true);
-    // 实现法线贴图
-    glActiveTexture(GL_TEXTURE1);
-    glBindTexture(GL_TEXTURE_2D, material.normalMap);
-    shader.setInt("material.normalMap", 1);
+    if (material.normalMap != 0) {
+        shader.setBool("material.sampleNormalMap", true);
+        // 实现法线贴图
+        glActiveTexture(GL_TEXTURE1);
+        glBindTexture(GL_TEXTURE_2D, material.normalMap);
+        shader.setInt("material.normalMap", 1);
+    }
+    else {
+        shader.setBool("material.sampleNormalMap", false);
+    }
 
     // 设置specularMap
     if (material.specularMap != 0) {
