@@ -1,17 +1,21 @@
 #include "utils/WindowFactory.h"
 #include "utils/TellurionModel.h"
+#include "utils/SkyBox.h"
 
 int main() {
     // 创建一个窗口Factory对象
     GLFWWindowFactory myWindow(800, 600, "This is Title");
-    // 创建一个矩形模型对象
-    Tellurion rectangle(&myWindow);
+    // 创建一个地球仪模型对象
+    Tellurion tellurion(&myWindow);
+    // 创建一个天空盒对象
+    SkyBox skyBox(&myWindow);
 
     // 运行窗口，传入一个lambda表达式，用于自定义渲染逻辑
     myWindow.run([&]() {
-        // 绘制矩形
-        rectangle.draw();
+        // 绘制地球仪
+        tellurion.draw();
+        // 绘制天空盒
+        skyBox.draw();
         });
-
     return 0;
 }

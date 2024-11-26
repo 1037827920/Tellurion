@@ -63,7 +63,7 @@ void Tellurion::draw() {
         // 获取当前时间（s）
         float currentTime = glfwGetTime();
         // 根据时间计算旋转角度，5.0f是速度因子
-        float angle = currentTime * 5.0f;
+        float angle = currentTime * 10.0f;
 
         // 初始化模型矩阵
         glm::mat4 model = glm::mat4(1.0f);
@@ -81,7 +81,7 @@ void Tellurion::draw() {
             model = glm::rotate(model, glm::radians(tiltAngle), glm::vec3(0.0f, 0.0f, 1.0f));
 
             // 动态旋转（绕y轴旋转
-            model = glm::rotate(model, glm::radians(angle), glm::vec3(0.0f, 1.0f, 0.0f));   
+            model = glm::rotate(model, glm::radians(angle), glm::vec3(0.0f, 1.0f, 0.0f));
         }
 
         // 缩放模型
