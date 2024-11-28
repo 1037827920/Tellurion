@@ -1,6 +1,6 @@
 #include "WindowFactory.h"
 
-Camera GLFWWindowFactory::camera = Camera(glm::vec3(0.0f, 0.0f, 3.0f));
+Camera GLFWWindowFactory::camera = Camera(glm::vec3(0.0f, 0.0f, 25.0f));
 
 // 初始化鼠标的最后X位置为屏幕宽度的一半
 float GLFWWindowFactory::lastX = GLFWWindowFactory::SCR_WIDTH / 2.0f;

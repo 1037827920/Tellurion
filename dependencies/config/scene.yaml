@@ -12,6 +12,14 @@ models:
     rotation: { x: 0.0, y: 0.0, z: 0.0 }
     scale: { x: 5.0, y: 5.0, z: 5.0 }
   - path: "./assets/bracket_and_base/bracket_and_base.obj"
-    position: { x: 0.0, y: 0.0, z: -3.0 }
+    position: { x: 0.0, y: 0.0, z: 0.0 }
     rotation: { x: 0.0, y: 0.0, z: 0.0 }
     scale: { x: 5.0, y: 5.0, z: 5.0 }
+  # - path: "./assets/platform/platform.obj"
+  #   position: { x: -5.0, y: -8.2, z: 3.0 }
+  #   rotation: { x: 0.0, y: 0.0, z: 0.0 }
+  #   scale: { x: 3.0, y: 3.0, z: 3.0 }
+  - path: "./assets/desk/desk.obj"
+    position: { x: -1.0, y: -26.0, z: 0.0 }
+    rotation: { x: 0.0, y: 0.0, z: 0.0 }
+    scale: { x: 40.0, y: 40.0, z: 40.0 }

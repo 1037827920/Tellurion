@@ -1,0 +1,24 @@
+# Blender 4.3.0 MTL File: '地板.blend'
+# www.blender.org
+
+newmtl Black_Powder_Coating
+Ka 1.000000 1.000000 1.000000
+Ks 0.500000 0.500000 0.500000
+Ke 0.000000 0.000000 0.000000
+Ni 1.450000
+d 1.000000
+illum 2
+map_Kd Black_Powder_Coating_Texture_Diffuse.png
+map_Bump -bm 0.200000 Black_Powder_Coating_Texture_Normal.png
+# map_Ns C:/Black Powder Coating Texture Roughness.png
+
+newmtl Pine_Wood
+Ka 1.000000 1.000000 1.000000
+Ks 0.500000 0.500000 0.500000
+Ke 0.000000 0.000000 0.000000
+Ni 1.450000
+d 1.000000
+illum 2
+map_Kd Pine_Wood_Texture_Diffuse.png
+map_Bump -bm 0.200000 Pine_Wood_Texture_Normal.png # 因为目前模型加载的方式很简单，只能处理一个纹理，所以只显示后面的材质
+# map_Ns C:/Pine Wood Texture Roughness.png
