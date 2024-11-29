@@ -34,10 +34,12 @@ void SkyBox::draw() {
     // 设置模型矩阵
     auto model = glm::mat4(1.0f);
     // 缩放矩阵，设置缩放倍数
-    model = glm::scale(model, glm::vec3(50.0f));
+    model = glm::scale(model, glm::vec3(200.0f));
     this->shader.setMat4("model", model);
     // 设置视图矩阵
-    this->shader.setMat4("view", this->window->getViewMatrix());
+    // 移除视图矩阵的位移部分，只保留旋转部分
+    glm::mat4 view = glm::mat4(glm::mat3(window->getViewMatrix()));
+    this->shader.setMat4("view", view);
     // 设置投影矩阵
     this->shader.setMat4("projection", this->window->getProjectionMatrix());
 

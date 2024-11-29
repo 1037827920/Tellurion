@@ -48,8 +48,11 @@ public:
         glfwSetCursorPosCallback(this->window, mouse_callback);
         // 设置鼠标滚轮滚动的回调函数
         glfwSetScrollCallback(this->window, scroll_callback);
-        // 告诉GLFW捕获鼠标
-        glfwSetInputMode(this->window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
+        // 设置鼠标按钮的回调函数
+        glfwSetMouseButtonCallback(this->window, mouse_button_callback);
+        // 默认不捕获鼠标
+        glfwSetInputMode(this->window, GLFW_CURSOR, GLFW_CURSOR_NORMAL);
+
     }
 
     // 获取窗口对象
@@ -81,7 +84,7 @@ public:
             // 初始化投影矩阵和视图矩阵
             this->projection =
                 glm::perspective(glm::radians(camera.Zoom),
-                    (float)SCR_WIDTH / (float)SCR_HEIGHT, 0.1f, 100.0f);
+                    (float)SCR_WIDTH / (float)SCR_HEIGHT, 0.1f, 1000.0f);
             this->view = this->camera.GetViewMatrix();
 
             // 执行更新函数
@@ -129,6 +132,19 @@ public:
         camera.ProcessMouseScroll(static_cast<float>(yoffset));
     }
 
+    // 鼠标按钮的回调函数
+    static void mouse_button_callback(GLFWwindow* window, int button, int action, int mods) {
+        if (button == GLFW_MOUSE_BUTTON_LEFT && action == GLFW_PRESS) {
+            // 切换鼠标模式
+            int cursorMode = glfwGetInputMode(window, GLFW_CURSOR);
+            if (cursorMode == GLFW_CURSOR_NORMAL) {
+                glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
+                // 重置第一次鼠标移动的标志
+                firstMouse = true;
+            }
+        }
+    }
+
     // 处理输入
     static void process_input(GLFWwindow* window) {
         // 按下ESC键时进入if块
@@ -167,7 +183,8 @@ public:
                 blinn = !blinn;
                 blinnKeyPressed = true;
             }
-        } else {
+        }
+        else {
             blinnKeyPressed = false;
         }
     }

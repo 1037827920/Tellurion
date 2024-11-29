@@ -31,17 +31,6 @@ struct Texture {
     string path;
 };
 
-struct Material {
-    string name;
-    glm::vec3 ambient;
-    glm::vec3 diffuse;
-    glm::vec3 specular;
-    GLuint texture;
-    GLuint normalMap;
-    GLuint specularMap;
-    float shininess;
-};
-
 class Model {
 public:
     struct face {
@@ -56,32 +45,20 @@ public:
     string directory;
 
     Model(string const& path) {
-        folderPath = path.substr(0, path.find_last_of("/"));
-        materialPath = path.substr(0, path.find_last_of(".")) + ".mtl";
         // 加载模型
         loadModel(path);
-        // 加载材质
-        loadMaterial(materialPath, material);
         // 设置顶点缓冲区
         setupBuffer();
-        material.shininess = 108.0f; 
     }
 
     // 绘制模型
-    void draw(Shader &shader);
+    void draw(Shader& shader, unsigned int directionLightDepthMap);
 
 private:
     unsigned int VAO, VBO, EBO;
-    Material material;
-    string materialPath;
-    string folderPath;
 
     // 从文件中加载OBJ模型，并将结果网格存储在网格向量中
     void loadModel(string const& path);
-    // 加载材质
-    void loadMaterial(const string& mtlPath, Material& material);
-    // 加载纹理
-    GLuint loadTexture(const string& texturePath);
     void setupBuffer();
 
     // 辅助函数，分割字符串

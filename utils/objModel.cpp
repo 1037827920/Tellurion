@@ -1,41 +1,9 @@
 #include "objModel.h"
-#define STB_IMAGE_IMPLEMENTATION
-#include "stb_image.h"
 
 // 绘制模型
-void Model::draw(Shader& shader) {
+void Model::draw(Shader& shader, unsigned int directionLightDepthMap) {
     // 使用着色器
     shader.use();
-
-    // 设置uniform变量
-    shader.setFloat("material.shininess", material.shininess);
-    shader.setVec3("material.ambient", material.ambient);
-    shader.setVec3("material.diffuse", material.diffuse);
-    shader.setVec3("material.specular", material.specular);
-
-    // 设置纹理
-    glActiveTexture(GL_TEXTURE0);
-    glBindTexture(GL_TEXTURE_2D, material.texture);
-    shader.setInt("material.texture", 0);
-
-    // 设置法线贴图
-    if (material.normalMap != 0) {
-        shader.setBool("material.sampleNormalMap", true);
-        // 实现法线贴图
-        glActiveTexture(GL_TEXTURE1);
-        glBindTexture(GL_TEXTURE_2D, material.normalMap);
-        shader.setInt("material.normalMap", 1);
-    }
-    else {
-        shader.setBool("material.sampleNormalMap", false);
-    }
-
-    // 设置specularMap
-    if (material.specularMap != 0) {
-        glActiveTexture(GL_TEXTURE2);
-        glBindTexture(GL_TEXTURE_2D, material.specularMap);
-        shader.setInt("material.specularMap", 2);
-    }
 
     // 绑定VAO
     glBindVertexArray(VAO);
@@ -98,91 +66,6 @@ void Model::loadModel(string const& path) {
     }
     // 关闭文件
     file.close();
-}
-
-void Model::loadMaterial(const std::string& mtlPath, Material& material) {
-    std::ifstream file(mtlPath);
-    if (!file.is_open()) {
-        std::cerr << "Could not open the file: " << mtlPath << std::endl;
-        return;
-    }
-
-    std::string line;
-    while (std::getline(file, line)) {
-        std::istringstream ss(line);
-        std::string token;
-        ss >> token;
-
-        if (token == "newmtl") {
-            ss >> material.name;
-        }
-        else if (token == "Ka") {
-            ss >> material.ambient.r >> material.ambient.g >> material.ambient.b;
-        }
-        else if (token == "Kd") {
-            ss >> material.diffuse.r >> material.diffuse.g >> material.diffuse.b;
-        }
-        else if (token == "Ks") {
-            ss >> material.specular.r >> material.specular.g >> material.specular.b;
-        }
-        else if (token == "map_Kd") {
-            std::string texturePath;
-            ss >> texturePath;
-
-            texturePath = folderPath + "/" + texturePath;
-            material.texture = loadTexture(texturePath);
-        }
-        else if (token == "map_Ks") {
-            std::string texturePath;
-            ss >> texturePath;
-
-            texturePath = folderPath + "/" + texturePath;
-            material.specularMap = loadTexture(texturePath);
-        }
-        else if (token == "map_Bump") { // 法线贴图
-            std::string texturePath;
-            ss >> texturePath;
-
-            texturePath = folderPath + "/" + texturePath;
-            material.normalMap = loadTexture(texturePath);
-        }
-    }
-
-    file.close();
-}
-
-GLuint Model::loadTexture(const std::string& texturePath) {
-    int width, height, nrChannels;
-    unsigned char* data = stbi_load(texturePath.c_str(), &width, &height, &nrChannels, 0);
-    if (data) {
-        GLenum format;
-        if (nrChannels == 4)
-            format = GL_RGBA;
-        else if (nrChannels == 3)
-            format = GL_RGB;
-        else
-            format = GL_RED;  // or handle other formats as needed
-
-        GLuint texture;
-        glGenTextures(1, &texture);
-        glBindTexture(GL_TEXTURE_2D, texture);
-
-        glTexImage2D(GL_TEXTURE_2D, 0, format, width, height, 0, format, GL_UNSIGNED_BYTE, data);  // Use format variable here
-
-        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
-        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
-        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-
-        stbi_image_free(data);
-
-        return texture;
-    }
-    else {
-        std::cout << "Texture failed to load at path: " << texturePath << std::endl;
-        stbi_image_free(data);
-        return 0;
-    }
 }
 
 void Model::setupBuffer() {
