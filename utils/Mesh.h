@@ -18,6 +18,10 @@ struct Vertex {
     glm::vec3 Normal;
     // 纹理坐标
     glm::vec2 TexCoords;
+    // 切线
+    glm::vec3 Tangent;
+    // 副切线
+    glm::vec3 Bitangent;
 };
 
 // 纹理
@@ -51,6 +55,7 @@ public:
 
     // 构造函数
     Mesh(vector<Vertex> vertices, vector<unsigned int> indices, vector<Texture> textures) {
+        // 设置数据
         this->vertices = vertices;
         this->indices = indices;
         this->textures = textures;
@@ -63,29 +68,41 @@ public:
         // 绑定纹理
         unsigned int diffuseNr = 0;
         unsigned int specularNr = 0;
+        unsigned int normalNr = 0;
 
         for (unsigned int i = 0; i < textures.size(); i++) {
-            // 传递环境光系数给着色器
-            shader.setVec3("material.ambient", textures[i].ambient);
-            // 传递漫反射系数给着色器
-            shader.setVec3("material.diffuse", textures[i].diffuse);
-            // 传递镜面反射系数给着色器
-            shader.setVec3("material.specular", textures[i].specular);
-            // 传递高光系数给着色器
-            shader.setFloat("material.shininess", textures[i].shininess);
-
             // 激活纹理单元
             glActiveTexture(GL_TEXTURE0 + i);
             // 获取纹理序号
             string number;
             string name = textures[i].type;
-            if (name == "texture_diffuse")
+            string shaderUniformName;
+            if (name == "texture_diffuse") {
                 number = std::to_string(diffuseNr++);
-            else if (name == "texture_specular")
+                shaderUniformName = "material" + number + ".diffuseMap";
+            }
+            else if (name == "texture_specular") {
                 number = std::to_string(specularNr++);
+                shaderUniformName = "material" + number + ".specularMap";
+            }
+            else if (name == "texture_normal") {
+                number = std::to_string(normalNr++);
+                shaderUniformName = "material" + number + ".normalMap";
+            }
+
+            // 传递环境光系数给着色器
+            shader.setVec3("material" + number + ".ambient", textures[i].ambient);
+            // 传递漫反射系数给着色器
+            shader.setVec3("material" + number + ".diffuse", textures[i].diffuse);
+            // 传递镜面反射系数给着色器
+            shader.setVec3("material" + number + ".specular", textures[i].specular);
+            // 传递高光系数给着色器
+            shader.setFloat("material" + number + ".shininess", textures[i].shininess);
+            // 设置采用法线贴图
+            shader.setBool("material" + number + ".sampleNormalMap", name == "texture_normal");
 
             // 将纹理传递给着色器
-            shader.setInt((name + number).c_str(), i);
+            shader.setInt(shaderUniformName.c_str(), i);
             glBindTexture(GL_TEXTURE_2D, textures[i].id);
         }
 
@@ -130,6 +147,12 @@ private:
         // 纹理坐标
         glEnableVertexAttribArray(2);
         glVertexAttribPointer(2, 2, GL_FLOAT, GL_FALSE, sizeof(Vertex), (void*)offsetof(Vertex, TexCoords));
+        // 切线
+        glEnableVertexAttribArray(3);
+        glVertexAttribPointer(3, 3, GL_FLOAT, GL_FALSE, sizeof(Vertex), (void*)offsetof(Vertex, Tangent));
+        // 副切线
+        glEnableVertexAttribArray(4);
+        glVertexAttribPointer(4, 3, GL_FLOAT, GL_FALSE, sizeof(Vertex), (void*)offsetof(Vertex, Bitangent));
 
         // 解绑VAO
         glBindVertexArray(0);

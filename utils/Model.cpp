@@ -15,7 +15,8 @@ void Model::loadModel(string path) {
     // 预处理参数
     // - aiProcess_Triangulate：如果模型不是三角形，则将其转换为三角形
     // - aiProcess_FlipUVs：翻转纹理坐标的y轴（opengl中大部分的图像的y轴都是反的）
-    const aiScene* scene = importer.ReadFile(path, aiProcess_Triangulate | aiProcess_FlipUVs);
+    // - aiProcess_CalcTangentSpace：计算切线和副切线
+    const aiScene* scene = importer.ReadFile(path, aiProcess_Triangulate | aiProcess_FlipUVs | aiProcess_CalcTangentSpace);
 
     // 检查是否导入成功
     if (!scene || scene->mFlags & AI_SCENE_FLAGS_INCOMPLETE || !scene->mRootNode) {
@@ -80,6 +81,20 @@ Mesh Model::processMesh(aiMesh* mesh, const aiScene* scene) {
         else {
             vertex.TexCoords = glm::vec2(0.0f, 0.0f);
         }
+        // 切线
+        vector.x = mesh->mTangents[i].x;
+        vector.y = mesh->mTangents[i].y;
+        vector.z = mesh->mTangents[i].z;
+        // DEBUG    
+        // cout << "tangent: " << vector.x << " " << vector.y << " " << vector.z << endl;
+        vertex.Tangent = vector;
+        // 副切线
+        vector.x = mesh->mBitangents[i].x;
+        vector.y = mesh->mBitangents[i].y;
+        vector.z = mesh->mBitangents[i].z;
+        // DEBUG
+        // cout << "bitangent: " << vector.x << " " << vector.y << " " << vector.z << endl;
+        vertex.Bitangent = vector;
 
         vertices.push_back(vertex);
     }
@@ -102,6 +117,9 @@ Mesh Model::processMesh(aiMesh* mesh, const aiScene* scene) {
         // 2. 处理镜面光贴图
         // std::vector<Texture> specularMaps = this->loadMaterialTextures(material, aiTextureType_SPECULAR, "texture_specular");
         // textures.insert(textures.end(), specularMaps.begin(), specularMaps.end());
+        // 3. 处理法线贴图
+        std::vector<Texture> normalMaps = this->loadMaterialTextures(material, aiTextureType_HEIGHT, "texture_normal");
+        textures.insert(textures.end(), normalMaps.begin(), normalMaps.end());
     }
     return Mesh(vertices, indices, textures);
 }
@@ -126,7 +144,7 @@ unsigned int TextureFromFile(const char* path, const string& directory, bool gam
         else if (nrComponents == 3)
             format = GL_RGB;
         else
-            format = GL_RED; 
+            format = GL_RED;
 
         glBindTexture(GL_TEXTURE_2D, textureID);
         glTexImage2D(GL_TEXTURE_2D, 0, format, width, height, 0, format, GL_UNSIGNED_BYTE, data);
@@ -183,7 +201,7 @@ vector<Texture> Model::loadMaterialTextures(aiMaterial* mat, aiTextureType type,
             texture.specular = glm::vec3(color.r, color.g, color.b);
             // 自定义高光系数Ns
             texture.shininess = 108.0f;
-            
+
             // 从aiMaterial中获取纹理
             texture.id = TextureFromFile(str.C_Str(), this->directory);
             texture.type = typeName;

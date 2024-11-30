@@ -11,5 +11,5 @@ Ni 1.450000
 d 1.000000
 illum 2
 map_Kd texture_diffuse0.png
-# map_Bump texture_normal0.png
+map_Bump texture_normal0.png
 
