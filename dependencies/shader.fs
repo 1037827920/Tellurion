@@ -9,7 +9,6 @@ struct Material {
     vec3 ambient;
     vec3 diffuse;
     vec3 specular;
-    sampler2D texture;
     sampler2D normalMap;
     sampler2D specularMap;
     float shininess;
@@ -18,6 +17,10 @@ struct Material {
 };
 
 uniform Material material;
+
+/// 材质
+// 漫反射贴图
+uniform sampler2D texture_diffuse0;
 
 
 uniform vec3 viewPos;
@@ -95,9 +98,9 @@ vec3 CalcDirLight(DirLight light, vec3 normal, vec3 viewDir)
         spec = pow(max(dot(reflectDir, viewDir), 0.0), material.shininess);
     }
     // combine results
-    vec3 ambient  = light.ambient * light.lightColor  * vec3(texture(material.texture, TexCoords));
-    vec3 diffuse  = light.diffuse * light.lightColor * diff * vec3(texture(material.texture, TexCoords));
-    vec3 specular = light.specular * light.lightColor * spec * vec3(texture(material.texture, TexCoords));
+    vec3 ambient  = light.ambient * light.lightColor  * vec3(texture(texture_diffuse0, TexCoords));
+    vec3 diffuse  = light.diffuse * light.lightColor * diff * vec3(texture(texture_diffuse0, TexCoords));
+    vec3 specular = light.specular * light.lightColor * spec * vec3(texture(texture_diffuse0, TexCoords));
 
     
     return (ambient + diffuse + specular);
@@ -120,9 +123,9 @@ vec3 CalcPointLight(PointLight light, vec3 normal, vec3 fragPos, vec3 viewDir)
     float attenuation = 1.0 / (light.constant + light.linear * distance + 
   			     light.quadratic * (distance * distance));    
     // combine results
-    vec3 ambient  = light.ambient  * light.lightColor * vec3(texture(material.texture, TexCoords));
-    vec3 diffuse  = light.diffuse  * light.lightColor * diff * vec3(texture(material.texture, TexCoords));
-    vec3 specular = light.specular * light.lightColor * spec * vec3(texture(material.texture, TexCoords));
+    vec3 ambient  = light.ambient  * light.lightColor * vec3(texture(texture_diffuse0, TexCoords));
+    vec3 diffuse  = light.diffuse  * light.lightColor * diff * vec3(texture(texture_diffuse0, TexCoords));
+    vec3 specular = light.specular * light.lightColor * spec * vec3(texture(texture_diffuse0, TexCoords));
     ambient  *= attenuation;
     diffuse  *= attenuation;
     specular *= attenuation;

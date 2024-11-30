@@ -15,30 +15,19 @@ Tellurion::Tellurion(GLFWWindowFactory* window) :window(window) {
     // 加载场景配置
     this->modelInfos = loadScene("config/scene.yaml");
     // 加载深度贴图
-    loadDirectionLightDepthMap();
+    // loadDirectionLightDepthMap();
 
     // 为每个模型信息加载模型
     for (auto& modelInfo : modelInfos) {
-        // 新建模型文件夹路径
-        string folderPath = modelInfo.path.substr(0, modelInfo.path.find_last_of("/"));
-        // 新建材质文件路径
-        string materialPath = modelInfo.path.substr(0, modelInfo.path.find_last_of(".")) + ".mtl";
-        // 新建材质
-        Material material;
-        // 加载材质
-        loadMaterial(folderPath, materialPath, material);
         // 加载模型
         modelInfo.model = new Model(modelInfo.path);
-        modelInfo.material = material;
     }
 
     // 初始化着色器
     this->shader = Shader("shader.vs", "shader.fs");
     // 初始化方向光阴影着色器
     this->directionLightShadowShader = Shader("directionLightShadowShader.vs", "directionLightShadowShader.fs");
-    // 初始化点光源阴影着色器
-    // 初始化调试深度贴图着色器
-    this->debugDepthQuad = Shader("debug_depth_quad.vs", "debug_depth_quad.fs");
+    // TODO: 初始化点光源阴影着色器
 }
 
 /// @brief 析构函数，释放资源
@@ -64,7 +53,7 @@ void Tellurion::draw() {
     for (auto i = 0; i < directionalLights.size(); i++) {
         std::string number = std::to_string(i);
         this->shader.setVec3("directionalLights[" + number + "].direction", directionalLights[i].direction);
-        // this->shader.setVec3("directionalLights[" + number + "].ambient", directionalLights[i].ambient);
+        this->shader.setVec3("directionalLights[" + number + "].ambient", directionalLights[i].ambient);
         this->shader.setVec3("directionalLights[" + number + "].diffuse", directionalLights[i].diffuse);
         this->shader.setVec3("directionalLights[" + number + "].specular", directionalLights[i].specular);
         this->shader.setVec3("directionalLights[" + number + "].lightColor", directionalLights[i].lightColor);
@@ -323,128 +312,14 @@ void Tellurion::renderScene(bool isRenderDepthMap) {
         // 传递模型矩阵给着色器
         this->shader.setMat4("model", model);
 
-        // 传递材质给着色器
-        this->shader.setFloat("material.shininess", modelInfo.material.shininess);
-        this->shader.setVec3("material.ambient", modelInfo.material.ambient);
-        this->shader.setVec3("material.diffuse", modelInfo.material.diffuse);
-        this->shader.setVec3("material.specular", modelInfo.material.specular);
-        // 设置地球贴图
-        glActiveTexture(GL_TEXTURE0);
-        glBindTexture(GL_TEXTURE_2D, modelInfo.material.texture);
-        shader.setInt("material.texture", 0);
-        // 设置法线贴图
-        if (modelInfo.material.normalMap != 0) {
-            shader.setBool("material.sampleNormalMap", true);
-            // 实现法线贴图
-            glActiveTexture(GL_TEXTURE1);
-            glBindTexture(GL_TEXTURE_2D, modelInfo.material.normalMap);
-            this->shader.setInt("material.normalMap", 1);
-        }
-        else {
-            this->shader.setBool("material.sampleNormalMap", false);
-        }
-        // 设置specularMap
-        if (modelInfo.material.specularMap != 0) {
-            glActiveTexture(GL_TEXTURE2);
-            glBindTexture(GL_TEXTURE_2D, modelInfo.material.specularMap);
-            shader.setInt("material.specularMap", 2);
-        }
         // 设置深度贴图
-        if (isRenderDepthMap) {
-            glActiveTexture(GL_TEXTURE3);
-            glBindTexture(GL_TEXTURE_2D, directionLightDepthMap);
-            shader.setInt("directionalLightShadowMaps", 3);
-        }
+        // if (isRenderDepthMap) {
+        //     glActiveTexture(GL_TEXTURE3);
+        //     glBindTexture(GL_TEXTURE_2D, directionLightDepthMap);
+        //     shader.setInt("directionalLightShadowMaps", 3);
+        // }
 
         // 绘制模型
-        modelInfo.model->draw(this->shader, this->directionLightDepthMap);
-    }
-}
-
-void Tellurion::loadMaterial(const std::string& folderPath, const std::string& mtlPath, Material& material) {
-    std::ifstream file(mtlPath);
-    if (!file.is_open()) {
-        std::cerr << "Could not open the file: " << mtlPath << std::endl;
-        return;
-    }
-
-    std::string line;
-    while (std::getline(file, line)) {
-        std::istringstream ss(line);
-        std::string token;
-        ss >> token;
-
-        if (token == "newmtl") {
-            ss >> material.name;
-        }
-        else if (token == "Ka") {
-            ss >> material.ambient.r >> material.ambient.g >> material.ambient.b;
-        }
-        else if (token == "Kd") {
-            ss >> material.diffuse.r >> material.diffuse.g >> material.diffuse.b;
-        }
-        else if (token == "Ks") {
-            ss >> material.specular.r >> material.specular.g >> material.specular.b;
-        }
-        else if (token == "map_Kd") {
-            std::string texturePath;
-            ss >> texturePath;
-
-            texturePath = folderPath + "/" + texturePath;
-            material.texture = loadTexture(texturePath);
-        }
-        else if (token == "map_Ks") {
-            std::string texturePath;
-            ss >> texturePath;
-
-            texturePath = folderPath + "/" + texturePath;
-            material.specularMap = loadTexture(texturePath);
-        }
-        else if (token == "map_Bump") { // 法线贴图
-            std::string texturePath;
-            ss >> texturePath;
-
-            texturePath = folderPath + "/" + texturePath;
-            material.normalMap = loadTexture(texturePath);
-        }
-    }
-
-    // 控制物体表面的高光效果，越大产生的高光越小但更锐利
-    material.shininess = 108.0f;
-
-    file.close();
-}
-
-GLuint Tellurion::loadTexture(const std::string& texturePath) {
-    int width, height, nrChannels;
-    unsigned char* data = stbi_load(texturePath.c_str(), &width, &height, &nrChannels, 0);
-    if (data) {
-        GLenum format;
-        if (nrChannels == 4)
-            format = GL_RGBA;
-        else if (nrChannels == 3)
-            format = GL_RGB;
-        else
-            format = GL_RED;  // or handle other formats as needed
-
-        GLuint texture;
-        glGenTextures(1, &texture);
-        glBindTexture(GL_TEXTURE_2D, texture);
-
-        glTexImage2D(GL_TEXTURE_2D, 0, format, width, height, 0, format, GL_UNSIGNED_BYTE, data);  // Use format variable here
-
-        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
-        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
-        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-
-        stbi_image_free(data);
-
-        return texture;
-    }
-    else {
-        std::cout << "Texture failed to load at path: " << texturePath << std::endl;
-        stbi_image_free(data);
-        return 0;
+        modelInfo.model->draw(this->shader);
     }
 }

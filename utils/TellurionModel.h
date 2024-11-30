@@ -9,7 +9,8 @@
 #include <glm/glm.hpp>
 #include <glm/gtc/matrix_transform.hpp>
 #include <glm/gtc/type_ptr.hpp>
-#include "objModel.h"
+// #include "objModel.h"
+#include "model.h"
 
 class Tellurion {
     /// 材质结构体
@@ -76,10 +77,6 @@ private:
     Shader directionLightShadowShader;
     // 点光源阴影渲染着色器
     // Shader pointLightShadowShader;
-    // 调试深度贴图着色器
-    Shader debugDepthQuad;
-    // 灯光着色器
-    Shader lightShader;
 
     std::vector<unsigned int> texture;
     GLFWWindowFactory* window;

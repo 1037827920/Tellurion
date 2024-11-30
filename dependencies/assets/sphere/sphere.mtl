@@ -10,6 +10,6 @@ Ke 0.000000 0.000000 0.000000
 Ni 1.450000
 d 1.000000
 illum 2
-map_Kd color.png
-map_Bump normal.png
+map_Kd texture_diffuse0.png
+# map_Bump texture_normal0.png
 
