@@ -27,13 +27,14 @@ struct Material{
     bool sampleNormalMap;
     // 法线贴图（凹凸贴图）
     sampler2D normalMap;
+    // 是否使用镜面反射贴图
+    bool sampleSpecularMap;
     // 镜面反射贴图
     sampler2D specularMap;
     // 反射光泽度
     float shininess;
     
 };
-
 // 材质
 uniform Material material0;
 
@@ -80,7 +81,6 @@ void main()
         sampledNormal=normalize(normalMap*2.-1.);
         sampledNormal=normalize(TBN*sampledNormal);
     }
-    
     // DEBUG
     // FragColor = vec4(sampledNormal * 0.5 + 0.5, 1.0);
     
@@ -117,7 +117,11 @@ vec3 CalcDirLight(DirLight light,vec3 normal,vec3 viewDir)
     // combine results
     vec3 ambient=light.ambient*light.lightColor*vec3(texture(material0.diffuseMap,TexCoords));
     vec3 diffuse=light.diffuse*light.lightColor*diff*vec3(texture(material0.diffuseMap,TexCoords));
-    vec3 specular=light.specular*light.lightColor*spec*vec3(texture(material0.diffuseMap,TexCoords));
+    vec3 specular;
+    if(material0.sampleSpecularMap)
+    specular=light.specular*light.lightColor*spec*vec3(texture(material0.specularMap,TexCoords));
+    else
+    specular=light.specular*light.lightColor*spec*vec3(texture(material0.diffuseMap,TexCoords));
     
     return(ambient+diffuse+specular);
 }
@@ -141,7 +145,11 @@ vec3 CalcPointLight(PointLight light,vec3 normal,vec3 fragPos,vec3 viewDir)
         // combine results
         vec3 ambient=light.ambient*light.lightColor*vec3(texture(material0.diffuseMap,TexCoords));
         vec3 diffuse=light.diffuse*light.lightColor*diff*vec3(texture(material0.diffuseMap,TexCoords));
-        vec3 specular=light.specular*light.lightColor*spec*vec3(texture(material0.diffuseMap,TexCoords));
+        vec3 specular;
+        if(material0.sampleSpecularMap)
+        specular=light.specular*light.lightColor*spec*vec3(texture(material0.specularMap,TexCoords));
+        else
+        specular=light.specular*light.lightColor*spec*vec3(texture(material0.diffuseMap,TexCoords));
         ambient*=attenuation;
         diffuse*=attenuation;
         specular*=attenuation;

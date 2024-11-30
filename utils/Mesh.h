@@ -89,6 +89,10 @@ public:
                 number = std::to_string(normalNr++);
                 shaderUniformName = "material" + number + ".normalMap";
             }
+            
+            // 将纹理传递给着色器
+            shader.setInt(shaderUniformName.c_str(), i);
+            glBindTexture(GL_TEXTURE_2D, textures[i].id);
 
             // 传递环境光系数给着色器
             shader.setVec3("material" + number + ".ambient", textures[i].ambient);
@@ -100,10 +104,8 @@ public:
             shader.setFloat("material" + number + ".shininess", textures[i].shininess);
             // 设置采用法线贴图
             shader.setBool("material" + number + ".sampleNormalMap", name == "texture_normal");
-
-            // 将纹理传递给着色器
-            shader.setInt(shaderUniformName.c_str(), i);
-            glBindTexture(GL_TEXTURE_2D, textures[i].id);
+            // 设置采用镜面光贴图
+            shader.setBool("material" + number + ".sampleSpecularMap", name == "texture_specular");
         }
 
         // 恢复默认纹理单元

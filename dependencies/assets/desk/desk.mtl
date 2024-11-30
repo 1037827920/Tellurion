@@ -10,7 +10,7 @@ d 1.000000
 illum 2
 map_Kd texture_diffuse0.png
 map_Bump -bm 0.200000 texture_normal0.png
-# map_Ns C:/Black Powder Coating Texture Roughness.png
+map_Ks texture_specular0.png
 
 newmtl Pine_Wood
 Ka 1.000000 1.000000 1.000000
@@ -21,4 +21,4 @@ d 1.000000
 illum 2
 map_Kd texture_diffuse1.png
 map_Bump -bm 0.200000 texture_normal1.png
-# map_Ns 
+map_Ks texture_specular1.png
