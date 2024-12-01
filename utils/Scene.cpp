@@ -90,10 +90,20 @@ void Scene::draw() {
     auto camera = window->camera;
     // 传递摄像机位置给着色器
     this->shader.setVec3("viewPos", camera.Position);
+    // 传递光源宽度给着色器
+    this->shader.setFloat("lightWidth", this->lightWidth);
+    // 将PCF采样半径传递给着色器
+    this->shader.setFloat("PCFSampleRadius", this->PCFSampleRadius);
+    // 设置阴影映射算法类型
+    // 0: SM
+    // 1: PCF
+    // 2: PCSS
+    this->shader.setInt("shadowMapType", 1);
 
     // 渲染场景
     renderScene(this->shader, true);
 }
+
 
 std::vector<Scene::ModelInfo> Scene::loadScene(const std::string& fileName) {
     std::vector<ModelInfo> models;

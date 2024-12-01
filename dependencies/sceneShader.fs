@@ -12,8 +12,6 @@ in vec3 Normal;
 in vec3 FragPos;
 // TBN矩阵
 in mat3 TBN;
-// 片段位置的光空间
-// in vec4 FragPosLightSpace;
 
 /// uniform
 // 材质结构体
@@ -43,6 +41,8 @@ uniform Material material0;
 
 uniform vec3 viewPos;
 uniform bool blinn;
+// 阴影计算算法选择
+uniform int shadowMapType;
 
 struct DirLight{
     vec3 direction;
@@ -68,26 +68,50 @@ struct PointLight{
     vec3 diffuse;
     vec3 specular;
 };
+
 #define MAX_DIRECTIONAL_LIGHTS 4
 // 定向光数量
 uniform int numDirectionalLights;
 // 定向光数组
 uniform DirLight directionalLights[MAX_DIRECTIONAL_LIGHTS];
+// 光源宽度
+uniform float lightWidth;
+// PCF采样半径
+uniform float PCFSampleRadius;
 
 #define NR_POINT_LIGHTS 4
 uniform int numPointLights;
 uniform PointLight pointLights[NR_POINT_LIGHTS];
 
-// 计算定向光贡献
-vec3 CalcDirLight(DirLight light,vec3 normal,vec3 viewDir);
-// 计算点光源贡献
-vec3 CalcPointLight(PointLight light,vec3 normal,vec3 fragPos,vec3 viewDir);
 // 存储了从光源视角看当前fragment位置的深度值，这个深度值是从阴影贴图中采样得到的，用于判断当前fragment是否在阴影中
 float closestDepth;
 // 存储了从摄像机是将看当前fragment位置的深度值，这个深度值计算是在摄像机移动时计算的
 float currentDepth;
-// 计算阴影
-float ShadowCalculation(vec4 fragPosLightSpace,vec3 normal,vec3 lightDir,sampler2D shadowMap);
+// PCF采样邻域大小
+#define PCF_RADIUS 6
+// 块半径
+#define BLOCK_RADIUS 5
+// 近裁剪面
+#define NEAR_PLANE 2.
+// 远裁剪面
+#define FAR_PLANE 50.
+
+// 计算定向光贡献
+vec3 CalcDirLight(DirLight light,vec3 normal,vec3 viewDir);
+// 计算点光源贡献
+vec3 CalcPointLight(PointLight light,vec3 normal,vec3 fragPos,vec3 viewDir);
+// 使用SM计算阴影
+float SM(vec4 fragPosLightSpace,vec3 normal,vec3 lightDir,sampler2D shadowMap);
+// 使用PCF计算阴影
+float PCF(vec4 fragPosLightSpace,vec3 normal,vec3 lightDir,sampler2D shadowMap);
+// 使用PCSS计算阴影
+float PCSS(vec4 fragPosLightSpace,vec3 normal,vec3 lightDir,sampler2D shadowMap);
+// 找到阴影贴图中遮挡当前片段的遮挡者，并计算遮挡者的平均深度值（阴影软化效果
+// uv: 当前片段在阴影贴图中的纹理坐标
+// zReceiver: 当前片段在光源视角看到的深度值
+// shadowMap: 阴影贴图
+// bias: 阴影偏移量
+float findBlocker(vec2 uv,float zReceiver,sampler2D shadowMap,float bias);
 
 void main()
 {
@@ -147,7 +171,18 @@ vec3 CalcDirLight(DirLight light,vec3 normal,vec3 viewDir)
     
     // 计算阴影
     vec4 FragPosLightSpace=light.lightSpaceMatrix*vec4(FragPos,1.);
-    float shadow=ShadowCalculation(FragPosLightSpace,normal,lightDir,light.shadowMap);
+    float shadow;
+    if (shadowMapType==0){
+        shadow=SM(FragPosLightSpace,normal,lightDir,light.shadowMap);
+    }
+    else if (shadowMapType==1){
+        shadow=PCF(FragPosLightSpace,normal,lightDir,light.shadowMap);
+    }
+    else if (shadowMapType==2){
+        shadow=PCSS(FragPosLightSpace,normal,lightDir,light.shadowMap);
+    }
+
+
     return(ambient+(1.-shadow)*(diffuse+specular));
 }
 
@@ -180,11 +215,10 @@ vec3 CalcPointLight(PointLight light,vec3 normal,vec3 fragPos,vec3 viewDir)
     return(ambient+diffuse+specular);
 }
 
-float ShadowCalculation(vec4 fragPosLightSpace,vec3 normal,vec3 lightDir,sampler2D shadowMap)
-{
-    // perform perspective divide
+float SM(vec4 fragPosLightSpace,vec3 normal,vec3 lightDir,sampler2D shadowMap){
+    // 转换为标准齐次坐标 z[-1, 1]
     vec3 projCoords=fragPosLightSpace.xyz/fragPosLightSpace.w;
-    // transform to [0,1] range
+    // xyz: [-1, 1] -> [0, 1]
     projCoords=projCoords*.5+.5;
     // 只要投影向量的z坐标大于1.0或小于0.0，就把shadow设置为1.0(即超出了光源视锥体的最远处，这样最远处也不会处在阴影中，导致采样过多不真实)
     if(projCoords.z>1.||projCoords.z<0.)
@@ -196,8 +230,125 @@ float ShadowCalculation(vec4 fragPosLightSpace,vec3 normal,vec3 lightDir,sampler
     currentDepth=projCoords.z;
     // 偏移量，解决阴影失真的问题, 根据表面朝向光线的角度更改偏移量
     float bias=max(.05*(1.-dot(normal,lightDir)),.005);
-    // 如果currentDepth大于closetDepth，说明当前fragment被某个物体遮挡住了，在阴影之中
+    /// 常规做法：如果currentDepth大于closetDepth，说明当前fragment被某个物体遮挡住了，在阴影之中
     float shadow=currentDepth-bias>closestDepth?1.:0.;
     
     return shadow;
+}
+
+float PCF(vec4 fragPosLightSpace,vec3 normal,vec3 lightDir,sampler2D shadowMap){
+    // 转换为标准齐次坐标 z[-1, 1]
+    vec3 projCoords=fragPosLightSpace.xyz/fragPosLightSpace.w;
+    // xyz: [-1, 1] -> [0, 1]
+    projCoords=projCoords*.5+.5;
+    // 只要投影向量的z坐标大于1.0或小于0.0，就把shadow设置为1.0(即超出了光源视锥体的最远处，这样最远处也不会处在阴影中，导致采样过多不真实)
+    if(projCoords.z>1.||projCoords.z<0.)
+    return 0.;
+    
+    // 从光源视角看到的深度值（从阴影贴图获取
+    closestDepth=texture(shadowMap,projCoords.xy).r;
+    // 从摄像机视角看到的深度值
+    currentDepth=projCoords.z;
+    // 偏移量，解决阴影失真的问题, 根据表面朝向光线的角度更改偏移量
+    float bias=max(.05*(1.-dot(normal,lightDir)),.005);
+    /// PCF:
+    float shadow=0.;
+    // 计算每个纹素的大小
+    vec2 texelSize=1./textureSize(shadowMap,0);
+    // 遍历3x3的邻域
+    for(int x=-PCF_RADIUS;x<=PCF_RADIUS;++x)
+    {
+        for(int y=-PCF_RADIUS;y<=PCF_RADIUS;++y)
+        {
+            // 从阴影贴图中采样深度值
+            float pcfDepth=texture(shadowMap,projCoords.xy+vec2(x,y)*texelSize).r;
+            // 如果当前片段的深度值大于采样的深度值，则在阴影中
+            shadow+=currentDepth-bias>pcfDepth?1.:0.;
+        }
+    }
+    // 计算平均阴影值
+    float total=2*PCF_RADIUS+1;
+    shadow/=(total*total);
+    
+    return shadow;
+}
+
+float PCSS(vec4 fragPosLightSpace,vec3 normal,vec3 lightDir,sampler2D shadowMap){
+    // 转换为标准齐次坐标 z[-1, 1]
+    vec3 projCoords=fragPosLightSpace.xyz/fragPosLightSpace.w;
+    // xyz: [-1, 1] -> [0, 1]
+    projCoords=projCoords*.5+.5;
+    // 只要投影向量的z坐标大于1.0或小于0.0，就把shadow设置为1.0(即超出了光源视锥体的最远处，这样最远处也不会处在阴影中，导致采样过多不真实)
+    if(projCoords.z>1.||projCoords.z<0.)
+    return 0.;
+    
+    // 从光源视角看到的深度值（从阴影贴图获取
+    closestDepth=texture(shadowMap,projCoords.xy).r;
+    // 从摄像机视角看到的深度值
+    currentDepth=projCoords.z;
+    // 偏移量，解决阴影失真的问题, 根据表面朝向光线的角度更改偏移量
+    float bias=max(.05*(1.-dot(normal,lightDir)),.005);
+    /// PCSS:
+    // 计算平均遮挡物体的深度值
+    float avgDepth=findBlocker(projCoords.xy,currentDepth,shadowMap,bias);
+    // 如果没有遮挡物体，则直接返回0.0(不在阴影中)
+    if(avgDepth==-1.){
+        return 0.;
+    }
+    // 半影大小
+    float penumbra=(currentDepth-avgDepth)/avgDepth*lightWidth;
+    // 采样半径
+    float filterRadius=penumbra*NEAR_PLANE/currentDepth;
+    // PCF
+    filterRadius*=PCFSampleRadius;
+    float shadow=0.;
+    // 计算每个纹素的大小
+    vec2 texelSize=1./textureSize(shadowMap,0);
+    // 遍历邻域
+    for(int x=-PCF_RADIUS;x<=PCF_RADIUS;++x)
+    {
+        for(int y=-PCF_RADIUS;y<=PCF_RADIUS;++y)
+        {
+            // 从阴影贴图中采样深度值
+            float shadowMapDepth=texture(shadowMap,projCoords.xy+filterRadius*vec2(x,y)*texelSize).r;
+            // 如果当前片段的深度值大于采样的深度值，则在阴影中
+            shadow+=currentDepth-bias>shadowMapDepth?1.:0.;
+        }
+    }
+    // 计算平均阴影值
+    float total=2*PCF_RADIUS+1;
+    shadow/=(total*total);
+    
+    return shadow;
+}
+
+float findBlocker(vec2 uv,float zReceiver,sampler2D shadowMap,float bias){
+    // 遮挡者计数
+    int blockers=0;
+    // 遮挡者深度值累加
+    float ret=0.;
+    
+    // 计算每个纹素的大小
+    vec2 texelSize=1./textureSize(shadowMap,0);
+    // 遍历以当前片段为中心的BLOCK_RADIUS*2+1的区域
+    for(int x=-BLOCK_RADIUS;x<=BLOCK_RADIUS;++x){
+        for(int y=-BLOCK_RADIUS;y<=BLOCK_RADIUS;++y){
+            // 从阴影贴图中采样深度值
+            float shadowMapDepth=texture(shadowMap,uv+vec2(x,y)*texelSize).r;
+            // 如果当前片段的深度值大于采样的深度值，则认为是遮挡者
+            if(zReceiver-bias>shadowMapDepth){
+                // 累加遮挡者的深度值
+                ret+=shadowMapDepth;
+                // 遮挡者计数+1
+                ++blockers;
+            }
+        }
+    }
+    
+    // 如果没有找到遮挡者，则返回-1
+    if(blockers==0)
+    return-1.;
+    
+    // 返回遮挡者的平均深度值
+    return ret/blockers;
 }

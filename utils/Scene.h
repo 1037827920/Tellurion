@@ -86,6 +86,10 @@ private:
     static constexpr float NEAR_PLANE = 1.0f;
     // 阴影贴图能够覆盖的最远距离
     static constexpr float FAR_PLANE = 90.0f;
+    // 光源宽度，影响阴影的柔和度，较大的光源宽度会导致阴影边缘更加柔和
+    static constexpr float lightWidth = 0.132f;
+    // PCF采样半径
+    static constexpr float PCFSampleRadius = 0.588f;
 
     // 方向光阴影渲染着色器
     Shader directionLightShadowShader;
