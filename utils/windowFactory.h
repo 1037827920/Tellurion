@@ -210,10 +210,9 @@ public:
     static const unsigned int SCR_WIDTH = 800;
     // 屏幕高度
     static const unsigned int SCR_HEIGHT = 600;
-
-private:
     // 窗口对象
     GLFWwindow* window;
+private:
 
     // 经过的时间
     float timeElapsed;

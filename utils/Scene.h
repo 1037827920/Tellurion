@@ -12,7 +12,6 @@
 #include <glm/glm.hpp>
 #include <glm/gtc/matrix_transform.hpp>
 #include <glm/gtc/type_ptr.hpp>
-// #include "objModel.h"
 #include "model.h"
 
 using std::vector;
@@ -65,9 +64,10 @@ class Scene {
         Material material;
     };
 public:
-
     // 场景渲染着色器
     Shader shader;
+    // 定向光数组
+    vector<DirectionalLight> directionalLights;
 
     /// @brief 构造函数，初始化窗口和加载配置文件
     /// @param window  opengl窗口
@@ -105,8 +105,6 @@ private:
 
     // 模型信息
     vector<ModelInfo> modelInfos;
-    // 定向光数组
-    vector<DirectionalLight> directionalLights;
     // 定向光数量
     int numDirectionalLights;
     // 点光源数组
@@ -132,6 +130,8 @@ private:
     /// @param isActiveTexture 是否激活纹理，一般是开启的，在渲染深度贴图时不开启（也就是从光源的视角渲染场景时
     void renderScene(Shader& shader, bool isActiveTexture);
     // void loadDepthMap();
+    /// @brief 处理输入，移动定向光
+    void processInputMoveDirLight();
 };
 
 #endif // SCENE_H

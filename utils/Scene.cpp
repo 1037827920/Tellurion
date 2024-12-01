@@ -36,6 +36,9 @@ Scene::~Scene() {
 }
 
 void Scene::draw() {
+    // 处理输入
+    processInputMoveDirLight();
+
     // 解决悬浮(pater panning)的阴影失真问题
     // 告诉opengl剔除正面
     glCullFace(GL_FRONT);
@@ -339,4 +342,66 @@ void Scene::renderScene(Shader& shader, bool isActiveTexture) {
         // 绘制模型
         modelInfo.model->draw(shader, this->directionLightDepthMaps, isActiveTexture);
     }
+}
+
+
+void Scene::processInputMoveDirLight() {
+    // 定义方向变化的步长
+    float step = 0.01f;
+
+    // 监听按键事件
+    if (glfwGetKey(this->window->window, GLFW_KEY_UP) == GLFW_PRESS) {
+        directionalLights[0].direction.y -= step;
+    }
+    if (glfwGetKey(this->window->window, GLFW_KEY_DOWN) == GLFW_PRESS) {
+        directionalLights[0].direction.y += step;
+    }
+    if (glfwGetKey(this->window->window, GLFW_KEY_LEFT) == GLFW_PRESS) {
+        directionalLights[0].direction.z -= step;
+    }
+    if (glfwGetKey(this->window->window, GLFW_KEY_RIGHT) == GLFW_PRESS) {
+        directionalLights[0].direction.z += step;
+    }
+
+    // 限制y和z坐标的范围
+    if (directionalLights[0].direction.y < -2.0f) {
+        directionalLights[0].direction.y = -2.0f;
+    }
+    if (directionalLights[0].direction.y > 2.0f) {
+        directionalLights[0].direction.y = 2.0f;
+    }
+    if (directionalLights[0].direction.z < -3.0f) {
+        directionalLights[0].direction.z = -3.0f;
+    }
+    if (directionalLights[0].direction.z > 3.0f) {
+        directionalLights[0].direction.z = 3.0f;
+    }
+
+    // 监听按键事件
+    // if (glfwGetKey(this->window->window, GLFW_KEY_I) == GLFW_PRESS) {
+    //     directionalLights[1].direction.y -= step;
+    // }
+    // if (glfwGetKey(this->window->window, GLFW_KEY_K) == GLFW_PRESS) {
+    //     directionalLights[1].direction.y += step;
+    // }
+    // if (glfwGetKey(this->window->window, GLFW_KEY_J) == GLFW_PRESS) {
+    //     directionalLights[1].direction.x -= step;
+    // }
+    // if (glfwGetKey(this->window->window, GLFW_KEY_L) == GLFW_PRESS) {
+    //     directionalLights[1].direction.x += step;
+    // }
+
+    // 限制y和z坐标的范围
+    // if (directionalLights[1].direction.y < -2.0f) {
+    //     directionalLights[1].direction.y = -2.0f;
+    // }
+    // if (directionalLights[1].direction.y > 2.0f) {
+    //     directionalLights[1].direction.y = 2.0f;
+    // }
+    // if (directionalLights[1].direction.x < -3.0f) {
+    //     directionalLights[1].direction.x = -3.0f;
+    // }
+    // if (directionalLights[1].direction.x > 3.0f) {
+    //     directionalLights[1].direction.x = 3.0f;
+    // }
 }
