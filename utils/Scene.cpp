@@ -26,9 +26,9 @@ Scene::Scene(GLFWWindowFactory* window) :window(window) {
     }
 
     // 初始化着色器
-    this->shader = Shader("sceneShader.vs", "sceneShader.fs");
+    this->shader = Shader("shaders/sceneShader.vs", "shaders/sceneShader.fs");
     // 初始化方向光阴影着色器
-    this->directionLightShadowShader = Shader("directionLightShadowShader.vs", "directionLightShadowShader.fs");
+    this->directionLightShadowShader = Shader("shaders/directionLightShadowShader.vs", "shaders/directionLightShadowShader.fs");
     // TODO: 初始化点光源阴影着色器
 }
 

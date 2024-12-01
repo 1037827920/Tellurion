@@ -19,7 +19,7 @@ SkyBox::SkyBox(GLFWWindowFactory* window) : window(window) {
     // 初始化渲染数据
     setupVertices();
     // 初始化着色器
-    this->shader = Shader("skyboxShader.vs", "skyboxShader.fs");
+    this->shader = Shader("shaders/skyboxShader.vs", "shaders/skyboxShader.fs");
 }
 
 /// @brief 绘制天空盒
