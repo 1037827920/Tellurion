@@ -11,3 +11,7 @@ models:
     position: { x: -1.0, y: -26.0, z: 0.0 }
     rotation: { x: 0.0, y: 0.0, z: 0.0 }
     scale: { x: 40.0, y: 40.0, z: 40.0 }
+  - path: "./assets/platform/platform.obj"
+    position: { x: -1.0, y: -26.0, z: 0.0 }
+    rotation: { x: 0.0, y: 0.0, z: 0.0 }
+    scale: { x: 40.0, y: 40.0, z: 40.0 }

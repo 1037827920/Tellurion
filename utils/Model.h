@@ -33,7 +33,7 @@ public:
     }
 
     // 绘制函数
-    void draw(Shader& shader);
+    void draw(Shader& shader, vector<unsigned int> directionLightDepthMaps, bool isActiveTexture);
 
 private:
 

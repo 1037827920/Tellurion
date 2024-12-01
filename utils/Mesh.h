@@ -64,56 +64,69 @@ public:
     }
 
     // 绘制函数
-    void draw(Shader& shader) {
-        // 绑定纹理
-        unsigned int diffuseNr = 0;
-        unsigned int specularNr = 0;
-        unsigned int normalNr = 0;
+    void draw(Shader& shader, vector<unsigned int> directionLightDepthMaps, bool isActiveTexture) {
+        // 是否激活纹理
+        if (isActiveTexture) {
+            unsigned int diffuseNr = 0;
+            unsigned int specularNr = 0;
+            unsigned int normalNr = 0;
+            unsigned int i = 0;
+            for (; i < textures.size(); i++) {
+                // 激活纹理单元
+                glActiveTexture(GL_TEXTURE0 + i);
+                // 绑定纹理单元
+                glBindTexture(GL_TEXTURE_2D, textures[i].id);
 
-        for (unsigned int i = 0; i < textures.size(); i++) {
-            // 激活纹理单元
-            glActiveTexture(GL_TEXTURE0 + i);
-            // 获取纹理序号
-            string number;
-            string name = textures[i].type;
-            string shaderUniformName;
-            if (name == "texture_diffuse") {
-                number = std::to_string(diffuseNr++);
-                shaderUniformName = "material" + number + ".diffuseMap";
-            }
-            else if (name == "texture_specular") {
-                number = std::to_string(specularNr++);
-                shaderUniformName = "material" + number + ".specularMap";
-            }
-            else if (name == "texture_normal") {
-                number = std::to_string(normalNr++);
-                shaderUniformName = "material" + number + ".normalMap";
-            }
-            
-            // 将纹理传递给着色器
-            shader.setInt(shaderUniformName.c_str(), i);
-            glBindTexture(GL_TEXTURE_2D, textures[i].id);
+                /// 将纹理传递给着色器
+                // 获取纹理序号
+                string number;
+                string name = textures[i].type;
+                string shaderUniformName;
+                if (name == "texture_diffuse") {
+                    number = std::to_string(diffuseNr++);
+                    shaderUniformName = "material" + number + ".diffuseMap";
+                }
+                else if (name == "texture_specular") {
+                    number = std::to_string(specularNr++);
+                    shaderUniformName = "material" + number + ".specularMap";
+                }
+                else if (name == "texture_normal") {
+                    number = std::to_string(normalNr++);
+                    shaderUniformName = "material" + number + ".normalMap";
+                }
 
-            // 传递环境光系数给着色器
-            shader.setVec3("material" + number + ".ambient", textures[i].ambient);
-            // 传递漫反射系数给着色器
-            shader.setVec3("material" + number + ".diffuse", textures[i].diffuse);
-            // 传递镜面反射系数给着色器
-            shader.setVec3("material" + number + ".specular", textures[i].specular);
-            // 传递高光系数给着色器
-            shader.setFloat("material" + number + ".shininess", textures[i].shininess);
-            // 设置采用法线贴图
-            shader.setBool("material" + number + ".sampleNormalMap", name == "texture_normal");
-            // 设置采用镜面光贴图
-            shader.setBool("material" + number + ".sampleSpecularMap", name == "texture_specular");
+                // 将纹理传递给着色器
+                shader.setInt(shaderUniformName.c_str(), i);
+
+                // 传递环境光系数给着色器
+                shader.setVec3("material" + number + ".ambient", textures[i].ambient);
+                // 传递漫反射系数给着色器
+                shader.setVec3("material" + number + ".diffuse", textures[i].diffuse);
+                // 传递镜面反射系数给着色器
+                shader.setVec3("material" + number + ".specular", textures[i].specular);
+                // 传递高光系数给着色器
+                shader.setFloat("material" + number + ".shininess", textures[i].shininess);
+                // 设置采用法线贴图
+                shader.setBool("material" + number + ".sampleNormalMap", name == "texture_normal");
+                // 设置采用镜面光贴图
+                shader.setBool("material" + number + ".sampleSpecularMap", name == "texture_specular");
+            }
+
+            // 设置定向光深度贴图
+            for (int j = 0; j < directionLightDepthMaps.size(); j++) {
+                glActiveTexture(GL_TEXTURE0 + i + j);
+                glBindTexture(GL_TEXTURE_2D, directionLightDepthMaps[j]);
+                shader.setInt("directionalLights[" + std::to_string(j) + "].shadowMap", i + j);
+            }
         }
-
-        // 恢复默认纹理单元
-        glActiveTexture(GL_TEXTURE0);
 
         // 绘制网格
         glBindVertexArray(VAO);
         glDrawElements(GL_TRIANGLES, indices.size(), GL_UNSIGNED_INT, 0);
+
+        // 恢复默认纹理单元
+        glActiveTexture(GL_TEXTURE0);
+        // 解绑VAO
         glBindVertexArray(0);
     }
 

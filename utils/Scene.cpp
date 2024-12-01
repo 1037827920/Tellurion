@@ -1,21 +1,23 @@
 
-#include "TellurionModel.h"
+#include "Scene.h"
 #include <iostream>
 #include "yaml-cpp/yaml.h"
 #define STB_IMAGE_IMPLEMENTATION
 #include "stb_image.h"
 
-/// @brief 构造函数，初始化窗口和加载配置文件
-/// @param window  opengl窗口
-Tellurion::Tellurion(GLFWWindowFactory* window) :window(window) {
-    // 加载方向光配置
-    directionalLights = loadDirectionalLights("config/directionalLights.yaml");
+Scene::Scene(GLFWWindowFactory* window) :window(window) {
+    // 加载定向光配置
+    this->directionalLights = loadDirectionalLights("config/directionalLights.yaml");
+    this->numDirectionalLights = this->directionalLights.size();
     // 加载点光源配置
     pointLights = loadPointLights("config/pointLights.yaml");
     // 加载场景配置
     this->modelInfos = loadScene("config/scene.yaml");
+
+    // 给directionLightDepthMaps分配大小
+    this->directionLightDepthMaps.resize(this->numDirectionalLights);
     // 加载深度贴图
-    // loadDirectionLightDepthMap();
+    loadDirectionLightDepthMap();
 
     // 为每个模型信息加载模型
     for (auto& modelInfo : modelInfos) {
@@ -24,20 +26,23 @@ Tellurion::Tellurion(GLFWWindowFactory* window) :window(window) {
     }
 
     // 初始化着色器
-    this->shader = Shader("shader.vs", "shader.fs");
+    this->shader = Shader("sceneShader.vs", "sceneShader.fs");
     // 初始化方向光阴影着色器
     this->directionLightShadowShader = Shader("directionLightShadowShader.vs", "directionLightShadowShader.fs");
     // TODO: 初始化点光源阴影着色器
 }
 
-/// @brief 析构函数，释放资源
-Tellurion::~Tellurion() {
+Scene::~Scene() {
 }
 
-/// @brief 绘制函数，用于渲染场景
-void Tellurion::draw() {
+void Scene::draw() {
+    // 解决悬浮(pater panning)的阴影失真问题
+    // 告诉opengl剔除正面
+    glCullFace(GL_FRONT);
     // 渲染深度贴图
-    // renderSceneToDepthMap();
+    renderSceneToDepthMap();
+    // 恢复剔除背面
+    glCullFace(GL_BACK);
 
     // 切换回默认视口
     glViewport(0, 0, this->SCR_WIDTH, this->SCR_HEIGHT);
@@ -45,18 +50,18 @@ void Tellurion::draw() {
 
     // -- 场景着色器配置 -- 
     this->shader.use();
-    // 将阴影矩阵传递给着色器
-    this->shader.setMat4("lightSpaceMatrix", this->lightSpaceMatrix);
     // 传递方向光数量给着色器
-    this->shader.setInt("numDirectionalLights", directionalLights.size());
+    this->shader.setInt("numDirectionalLights", this->numDirectionalLights);
     // 传递每个方向光的属性给着色器
-    for (auto i = 0; i < directionalLights.size(); i++) {
+    for (auto i = 0; i < this->numDirectionalLights; i++) {
         std::string number = std::to_string(i);
-        this->shader.setVec3("directionalLights[" + number + "].direction", directionalLights[i].direction);
-        this->shader.setVec3("directionalLights[" + number + "].ambient", directionalLights[i].ambient);
-        this->shader.setVec3("directionalLights[" + number + "].diffuse", directionalLights[i].diffuse);
-        this->shader.setVec3("directionalLights[" + number + "].specular", directionalLights[i].specular);
-        this->shader.setVec3("directionalLights[" + number + "].lightColor", directionalLights[i].lightColor);
+        this->shader.setVec3("directionalLights[" + number + "].direction", this->directionalLights[i].direction);
+        this->shader.setVec3("directionalLights[" + number + "].ambient", this->directionalLights[i].ambient);
+        this->shader.setVec3("directionalLights[" + number + "].diffuse", this->directionalLights[i].diffuse);
+        this->shader.setVec3("directionalLights[" + number + "].specular", this->directionalLights[i].specular);
+        this->shader.setVec3("directionalLights[" + number + "].lightColor", this->directionalLights[i].lightColor);
+        // 将阴影矩阵传递给着色器
+        this->shader.setMat4("directionalLights[" + number + "].lightSpaceMatrix", this->directionalLights[i].lightSpaceMatrix);
     }
     // 传递点光源数量给着色器
     this->shader.setInt("numPointLights", pointLights.size());
@@ -87,13 +92,10 @@ void Tellurion::draw() {
     this->shader.setVec3("viewPos", camera.Position);
 
     // 渲染场景
-    renderScene(false);
+    renderScene(this->shader, true);
 }
 
-/// @brief 加载场景配置文件
-/// @param fileName 文件名
-/// @return 模型信息
-std::vector<Tellurion::ModelInfo> Tellurion::loadScene(const std::string& fileName) {
+std::vector<Scene::ModelInfo> Scene::loadScene(const std::string& fileName) {
     std::vector<ModelInfo> models;
     try {
         YAML::Node scene = YAML::LoadFile(fileName);
@@ -127,10 +129,7 @@ std::vector<Tellurion::ModelInfo> Tellurion::loadScene(const std::string& fileNa
     return models;
 }
 
-/// @brief 加载方向光配置文件
-/// @param fileName 文件名
-/// @return 返回方向光信息
-std::vector<Tellurion::DirectionalLight> Tellurion::loadDirectionalLights(const std::string& fileName) {
+std::vector<Scene::DirectionalLight> Scene::loadDirectionalLights(const std::string& fileName) {
     std::vector<DirectionalLight> directionalLights;
     try {
         YAML::Node scene = YAML::LoadFile(fileName);
@@ -152,6 +151,7 @@ std::vector<Tellurion::DirectionalLight> Tellurion::loadDirectionalLights(const 
                 light.lightColor.x = scene["directionalLights"][i]["lightColor"]["x"].as<float>();
                 light.lightColor.y = scene["directionalLights"][i]["lightColor"]["y"].as<float>();
                 light.lightColor.z = scene["directionalLights"][i]["lightColor"]["z"].as<float>();
+                light.lightSpaceMatrix = glm::mat4(1.0f);
                 directionalLights.push_back(light);
             }
         }
@@ -161,10 +161,7 @@ std::vector<Tellurion::DirectionalLight> Tellurion::loadDirectionalLights(const 
     return directionalLights;
 }
 
-/// @brief 加载点光源配置文件
-/// @param fileName 文件名
-/// @return 返回点光源信息
-std::vector<Tellurion::PointLight> Tellurion::loadPointLights(const std::string& fileName) {
+std::vector<Scene::PointLight> Scene::loadPointLights(const std::string& fileName) {
     std::vector<PointLight> pointLights;
     try {
         YAML::Node scene = YAML::LoadFile(fileName);
@@ -198,31 +195,38 @@ std::vector<Tellurion::PointLight> Tellurion::loadPointLights(const std::string&
     return pointLights;
 }
 
-void Tellurion::loadDirectionLightDepthMap() {
+// 加载定向光深度贴图
+void Scene::loadDirectionLightDepthMap() {
     // 创建帧缓冲对象
     glGenFramebuffers(1, &this->directionLightDepthMapFBO);
-    // 创建深度贴图
-    glGenTextures(1, &this->directionLightDepthMap);
-    // 绑定深度纹理
-    glBindTexture(GL_TEXTURE_2D, this->directionLightDepthMap);
-    // 只关注深度值，设置为GL_DEPTH_COMPONENT
-    glTexImage2D(GL_TEXTURE_2D, 0, GL_DEPTH_COMPONENT, SHADOW_WIDTH, SHADOW_HEIGHT, 0, GL_DEPTH_COMPONENT, GL_FLOAT, nullptr);
-    // 设置纹理过滤方式
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
-    // 设置纹理环绕方式
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
-    // 绑定深度贴图到帧缓冲对象
-    glBindFramebuffer(GL_FRAMEBUFFER, this->directionLightDepthMapFBO);
-    glFramebufferTexture2D(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_TEXTURE_2D, this->directionLightDepthMap, 0);
-    glDrawBuffer(GL_NONE);
-    glReadBuffer(GL_NONE);
+    for (int i = 0; i < this->numDirectionalLights; ++i) {
+        // 创建深度贴图
+        glGenTextures(1, &this->directionLightDepthMaps[i]);
+        // 绑定深度纹理
+        glBindTexture(GL_TEXTURE_2D, this->directionLightDepthMaps[i]);
+        // 只关注深度值，设置为GL_DEPTH_COMPONENT
+        glTexImage2D(GL_TEXTURE_2D, 0, GL_DEPTH_COMPONENT, SHADOW_WIDTH, SHADOW_HEIGHT, 0, GL_DEPTH_COMPONENT, GL_FLOAT, nullptr);
+        // 设置纹理过滤方式
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+        // 设置纹理环绕方式
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
+        // 存储深度贴图边框颜色（防止出现采样过多，这样超出深度贴图的坐标就不会一直在阴影中）
+        float borderColor[] = { 1.0, 1.0, 1.0, 1.0 };
+        glTexParameterfv(GL_TEXTURE_2D, GL_TEXTURE_BORDER_COLOR, borderColor);
+        // 绑定深度贴图到帧缓冲对象
+        glBindFramebuffer(GL_FRAMEBUFFER, this->directionLightDepthMapFBO);
+        glFramebufferTexture2D(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_TEXTURE_2D, this->directionLightDepthMaps[i], 0);
+        glDrawBuffer(GL_NONE);
+        glReadBuffer(GL_NONE);
+    }
+
     // 解绑帧缓冲对象
     glBindFramebuffer(GL_FRAMEBUFFER, 0);
 }
 
-// void Tellurion::loadDepthMap() {
+// void Scene::loadDepthMap() {
 //     // 创建帧缓冲对象
 //     glGenFramebuffers(1, &this->directionLightDepthMapFBO);
 //     // 创建深度贴图
@@ -251,44 +255,54 @@ void Tellurion::loadDirectionLightDepthMap() {
 //     glBindFramebuffer(GL_FRAMEBUFFER, 0);
 // }
 
-void Tellurion::renderSceneToDepthMap() {
+void Scene::renderSceneToDepthMap() {
     // 投影矩阵
-    glm::mat4 lightProjection = glm::ortho(-10.0f, 10.0f, -10.0f, 10.0f, NEAR_PLANE, FAR_PLANE);
+    // 阴影贴图覆盖的实际范围
+    glm::mat4 lightProjection = glm::ortho(-100.0f, 100.0f, -100.0f, 100.0f, NEAR_PLANE, FAR_PLANE);
 
-    // 对每个方向光生成阴影贴图（先糊一下代码，假设目前只有一个方向光）
+    // 对每个方向光生成阴影贴图
     // 视图矩阵
-    glm::mat4 lightView = glm::lookAt(directionalLights[0].direction * 10.0f, glm::vec3(0.0f), glm::vec3(0.0, 1.0, 0.0));
+    glm::mat4 lightView;
     // 计算阴影矩阵
-    this->lightSpaceMatrix = lightProjection * lightView;
+    for (int i = 0; i < this->numDirectionalLights; ++i) {
+        lightView = glm::lookAt(-directionalLights[i].direction * 1.0f, glm::vec3(0.0f), glm::vec3(0.0, 1.0, 0.0));
+        this->directionalLights[i].lightSpaceMatrix = lightProjection * lightView;
+        // DEBUG
+        // cout << "lightSpaceMatrix: " << lightSpaceMatrix[0][0] << " " << lightSpaceMatrix[0][1] << " " << lightSpaceMatrix[0][2] << " " << lightSpaceMatrix[0][3] << endl;
+        // cout << "lightSpaceMatrix: " << lightSpaceMatrix[1][0] << " " << lightSpaceMatrix[1][1] << " " << lightSpaceMatrix[1][2] << " " << lightSpaceMatrix[1][3] << endl;
+        // cout << "lightSpaceMatrix: " << lightSpaceMatrix[2][0] << " " << lightSpaceMatrix[2][1] << " " << lightSpaceMatrix[2][2] << " " << lightSpaceMatrix[2][3] << endl;
+        // cout << "lightSpaceMatrix: " << lightSpaceMatrix[3][0] << " " << lightSpaceMatrix[3][1] << " " << lightSpaceMatrix[3][2] << " " << lightSpaceMatrix[3][3] << endl;
 
-    // 使用着色器
-    this->directionLightShadowShader.use();
-    // 传递模型矩阵给着色器
-    this->directionLightShadowShader.setMat4("model", glm::mat4(1.0f));
-    // 传递阴影矩阵给着色器
-    this->directionLightShadowShader.setMat4("lightSpaceMatrix", this->lightSpaceMatrix);
+        // 使用着色器
+        this->directionLightShadowShader.use();
+        // 传递阴影矩阵给着色器
+        this->directionLightShadowShader.setMat4("lightSpaceMatrix", this->directionalLights[i].lightSpaceMatrix);
 
-    // 切换视口
-    glViewport(0, 0, SHADOW_WIDTH, SHADOW_HEIGHT);
-    glBindFramebuffer(GL_FRAMEBUFFER, this->directionLightDepthMapFBO);
-    glClear(GL_DEPTH_BUFFER_BIT);
+        // 切换视口
+        glViewport(0, 0, SHADOW_WIDTH, SHADOW_HEIGHT);
 
-    // 渲染场景
-    renderScene();
+        // 绑定帧缓冲
+        glBindFramebuffer(GL_FRAMEBUFFER, this->directionLightDepthMapFBO);
 
+        // 绑定到对应的深度纹理进行场景渲染
+        glFramebufferTexture2D(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_TEXTURE_2D, this->directionLightDepthMaps[i], 0);
+
+        glClear(GL_DEPTH_BUFFER_BIT);
+
+        // 渲染场景
+        renderScene(this->directionLightShadowShader, false);
+    }
     // 解绑帧缓冲对象
     glBindFramebuffer(GL_FRAMEBUFFER, 0);
 }
 
-void Tellurion::renderScene(bool isRenderDepthMap) {
-    // 使用着色器
-    this->shader.use();
-
+void Scene::renderScene(Shader& shader, bool isActiveTexture) {
+    shader.use();
     // 绘制每个模型
     for (const auto& modelInfo : modelInfos) {
         // 获取当前时间（s）
         float currentTime = glfwGetTime();
-        // 根据时间计算旋转角度，5.0f是速度因子
+        // 根据时间计算旋转角度，10.0f是速度因子
         float angle = currentTime * 10.0f;
 
         // 初始化模型矩阵
@@ -305,21 +319,14 @@ void Tellurion::renderScene(bool isRenderDepthMap) {
             model = glm::rotate(model, glm::radians(tiltAngle), glm::vec3(0.0f, 0.0f, 1.0f));
 
             // 动态旋转（绕y轴旋转
-            // model = glm::rotate(model, glm::radians(angle), glm::vec3(0.0f, 1.0f, 0.0f));
+            model = glm::rotate(model, glm::radians(angle), glm::vec3(0.0f, 1.0f, 0.0f));
         }
         // 缩放模型
         model = glm::scale(model, modelInfo.scale);
         // 传递模型矩阵给着色器
-        this->shader.setMat4("model", model);
-
-        // 设置深度贴图
-        // if (isRenderDepthMap) {
-        //     glActiveTexture(GL_TEXTURE3);
-        //     glBindTexture(GL_TEXTURE_2D, directionLightDepthMap);
-        //     shader.setInt("directionalLightShadowMaps", 3);
-        // }
+        shader.setMat4("model", model);
 
         // 绘制模型
-        modelInfo.model->draw(this->shader);
+        modelInfo.model->draw(shader, this->directionLightDepthMaps, isActiveTexture);
     }
 }
