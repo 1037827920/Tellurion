@@ -28,12 +28,12 @@ public:
     string directory;
 
     // 构造函数
-    Model(string const &path) {
+    Model(string const& path) {
         loadModel(path);
     }
 
     // 绘制函数
-    void draw(Shader& shader, vector<unsigned int> directionLightDepthMaps, bool isActiveTexture);
+    void draw(Shader& shader, vector<unsigned int> directionLightDepthMaps, bool isActiveTexture, vector<unsigned int> d_d2_filter_maps, bool is_d_d2);
 
 private:
 

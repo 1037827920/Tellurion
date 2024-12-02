@@ -14,8 +14,14 @@ Scene::Scene(GLFWWindowFactory* window) :window(window) {
     // 加载场景配置
     this->modelInfos = loadScene("config/scene.yaml");
 
+    // 给directionLightDepthMapFBOs分配大小
+    this->directionLightDepthMapFBOs.resize(this->numDirectionalLights);
     // 给directionLightDepthMaps分配大小
     this->directionLightDepthMaps.resize(this->numDirectionalLights);
+    // 给directionLightDepthVarianceMaps分配大小
+    this->directionLightDepthMeanVarMaps.resize(this->numDirectionalLights);
+    this->d_d2_filter_FBO.resize(this->numDirectionalLights * 2);
+    this->d_d2_filter_maps.resize(this->numDirectionalLights * 2);
     // 加载深度贴图
     loadDirectionLightDepthMap();
 
@@ -29,7 +35,8 @@ Scene::Scene(GLFWWindowFactory* window) :window(window) {
     this->shader = Shader("shaders/sceneShader.vs", "shaders/sceneShader.fs");
     // 初始化方向光阴影着色器
     this->directionLightShadowShader = Shader("shaders/directionLightShadowShader.vs", "shaders/directionLightShadowShader.fs");
-    // TODO: 初始化点光源阴影着色器
+    // 初始化均值方差计算着色器
+    this->d_d2_filter_shader = Shader("shaders/vsmShader.vs", "shaders/vsmShader.fs");
 }
 
 Scene::~Scene() {
@@ -49,6 +56,7 @@ void Scene::draw() {
 
     // 切换回默认视口
     glViewport(0, 0, this->SCR_WIDTH, this->SCR_HEIGHT);
+    glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
     // -- 场景着色器配置 -- 
@@ -98,10 +106,10 @@ void Scene::draw() {
     // 将PCF采样半径传递给着色器
     this->shader.setFloat("PCFSampleRadius", this->PCFSampleRadius);
     // 设置阴影映射算法类型
-    // 0: SM
-    // 1: PCF
-    // 2: PCSS
-    this->shader.setInt("shadowMapType", 1);
+    this->shader.setInt("shadowMapType", SHADOW_ALGORITHM);
+    // 将近平面和远平面传递给着色器
+    this->shader.setFloat("near_plane", NEAR_PLANE);
+    this->shader.setFloat("far_plane", FAR_PLANE);
 
     // 渲染场景
     renderScene(this->shader, true);
@@ -210,9 +218,10 @@ std::vector<Scene::PointLight> Scene::loadPointLights(const std::string& fileNam
 
 // 加载定向光深度贴图
 void Scene::loadDirectionLightDepthMap() {
-    // 创建帧缓冲对象
-    glGenFramebuffers(1, &this->directionLightDepthMapFBO);
     for (int i = 0; i < this->numDirectionalLights; ++i) {
+        // 创建帧缓冲对象
+        glGenFramebuffers(1, &this->directionLightDepthMapFBOs[i]);
+        // 深度贴图
         // 创建深度贴图
         glGenTextures(1, &this->directionLightDepthMaps[i]);
         // 绑定深度纹理
@@ -229,50 +238,82 @@ void Scene::loadDirectionLightDepthMap() {
         float borderColor[] = { 1.0, 1.0, 1.0, 1.0 };
         glTexParameterfv(GL_TEXTURE_2D, GL_TEXTURE_BORDER_COLOR, borderColor);
         // 绑定深度贴图到帧缓冲对象
-        glBindFramebuffer(GL_FRAMEBUFFER, this->directionLightDepthMapFBO);
+        glBindFramebuffer(GL_FRAMEBUFFER, this->directionLightDepthMapFBOs[i]);
         glFramebufferTexture2D(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_TEXTURE_2D, this->directionLightDepthMaps[i], 0);
-        glDrawBuffer(GL_NONE);
-        glReadBuffer(GL_NONE);
+
+        if (SHADOW_ALGORITHM == 3) {
+            // 深度的均值和方差贴图
+            // 创建深度贴图
+            glGenTextures(1, &this->directionLightDepthMeanVarMaps[i]);
+            // 绑定深度纹理
+            glBindTexture(GL_TEXTURE_2D, this->directionLightDepthMeanVarMaps[i]);
+            glTexImage2D(GL_TEXTURE_2D, 0, GL_RG32F, SHADOW_WIDTH, SHADOW_HEIGHT, 0, GL_RG, GL_FLOAT, NULL);
+            // 设置纹理过滤方式
+            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
+            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
+            // 存储深度贴图边框颜色（防止出现采样过多，这样超出深度贴图的坐标就不会一直在阴影中）
+            float borderColor[] = { 1.0, 1.0, 1.0, 1.0 };
+            glTexParameterfv(GL_TEXTURE_2D, GL_TEXTURE_BORDER_COLOR, borderColor);
+            // 绑定到 DepthMap 中
+            glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, this->directionLightDepthMeanVarMaps[i], 0);
+            if (glCheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE) {
+                std::cout << "ERROR::FRAMEBUFFER:: Framebuffer is not complete!" << std::endl;
+            }
+            GLenum drawBuffers[1] = { GL_COLOR_ATTACHMENT0 };
+            glDrawBuffers(1, drawBuffers);
+        }
+        else {
+            // 如果不需要颜色附件，则禁用颜色输出
+            glDrawBuffer(GL_NONE);
+            glReadBuffer(GL_NONE);
+        }
     }
 
     // 解绑帧缓冲对象
     glBindFramebuffer(GL_FRAMEBUFFER, 0);
-}
 
-// void Scene::loadDepthMap() {
-//     // 创建帧缓冲对象
-//     glGenFramebuffers(1, &this->directionLightDepthMapFBO);
-//     // 创建深度贴图
-//     glGenTextures(1, &this->directionLightDepthMap);
-//     // 绑定深度纹理
-//     glBindTexture(GL_TEXTURE_CUBE_MAP, directionLightDepthMap);
-//     // 生成立方体贴图的每个面
-//     for (unsigned int i = 0; i < 6; ++i) {
-//         // 只关注深度值，设置为GL_DEPTH_COMPONENT
-//         glTexImage2D(GL_TEXTURE_CUBE_MAP_POSITIVE_X + i, 0, GL_DEPTH_COMPONENT, SHADOW_WIDTH, SHADOW_HEIGHT, 0, GL_DEPTH_COMPONENT, GL_FLOAT, nullptr);
-//     }
-//     // 设置纹理过滤方式
-//     glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
-//     glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
-//     // 设置纹理环绕方式
-//     glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
-//     glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
-//     glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_WRAP_R, GL_CLAMP_TO_EDGE);
-//     // 绑定深度贴图到帧缓冲对象
-//     glBindFramebuffer(GL_FRAMEBUFFER, this->directionLightDepthMapFBO);
-//     glFramebufferTexture(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, this->directionLightDepthMap, 0);
-//     // 不需要颜色缓冲
-//     glDrawBuffer(GL_NONE);
-//     glReadBuffer(GL_NONE);
-//     // 解绑帧缓冲对象
-//     glBindFramebuffer(GL_FRAMEBUFFER, 0);
-// }
+    if (SHADOW_ALGORITHM == 3) {
+        for (int i = 0; i < this->numDirectionalLights; ++i) {
+            glGenFramebuffers(1, &this->d_d2_filter_FBO[i * 2]);
+            glGenTextures(1, &this->d_d2_filter_maps[i * 2]);
+            glBindTexture(GL_TEXTURE_2D, this->d_d2_filter_maps[i * 2]);
+            glTexImage2D(GL_TEXTURE_2D, 0, GL_RG32F, SHADOW_WIDTH, SHADOW_HEIGHT, 0, GL_RG, GL_FLOAT, NULL);
+            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
+            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
+            glBindFramebuffer(GL_FRAMEBUFFER, this->d_d2_filter_FBO[i * 2]);
+            glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, this->d_d2_filter_maps[i * 2], 0);
+            if (glCheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE) {
+                std::cout << "ERROR::FRAMEBUFFER:: Framebuffer is not complete!" << std::endl;
+            }
+
+            glGenFramebuffers(1, &this->d_d2_filter_FBO[i * 2 + 1]);
+            glGenTextures(1, &this->d_d2_filter_maps[i * 2 + 1]);
+            glBindTexture(GL_TEXTURE_2D, this->d_d2_filter_maps[i * 2 + 1]);
+            glTexImage2D(GL_TEXTURE_2D, 0, GL_RG32F, SHADOW_WIDTH, SHADOW_HEIGHT, 0, GL_RG, GL_FLOAT, NULL);
+            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
+            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
+            glBindFramebuffer(GL_FRAMEBUFFER, this->d_d2_filter_FBO[i * 2 + 1]);
+            glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, this->d_d2_filter_maps[i * 2 + 1], 0);
+            if (glCheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE) {
+                std::cout << "ERROR::FRAMEBUFFER:: Framebuffer is not complete!" << std::endl;
+            }
+        }
+        glBindFramebuffer(GL_FRAMEBUFFER, 0);
+    }
+}
 
 void Scene::renderSceneToDepthMap() {
     // 投影矩阵
-    // 阴影贴图覆盖的实际范围
-    glm::mat4 lightProjection = glm::ortho(-100.0f, 100.0f, -100.0f, 100.0f, NEAR_PLANE, FAR_PLANE);
-
+    // 阴影贴图覆盖的实际范围(正交投影)
+    float edge = 120.0f;
+    glm::mat4 lightProjection = glm::ortho(-edge, edge, -edge, edge, NEAR_PLANE, FAR_PLANE);
+    // 透视投影
     // 对每个方向光生成阴影贴图
     // 视图矩阵
     glm::mat4 lightView;
@@ -295,15 +336,46 @@ void Scene::renderSceneToDepthMap() {
         glViewport(0, 0, SHADOW_WIDTH, SHADOW_HEIGHT);
 
         // 绑定帧缓冲
-        glBindFramebuffer(GL_FRAMEBUFFER, this->directionLightDepthMapFBO);
+        glBindFramebuffer(GL_FRAMEBUFFER, this->directionLightDepthMapFBOs[i]);
 
-        // 绑定到对应的深度纹理进行场景渲染
-        glFramebufferTexture2D(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_TEXTURE_2D, this->directionLightDepthMaps[i], 0);
-
-        glClear(GL_DEPTH_BUFFER_BIT);
+        if (SHADOW_ALGORITHM == 3) {
+            glClearColor(1.0f, 1.0f, 0.0f, 1.0f); // 注意这里的初始化, 1.0f 深度最大值
+            glClear(GL_DEPTH_BUFFER_BIT | GL_COLOR_BUFFER_BIT);
+        }
+        else {
+            glClear(GL_DEPTH_BUFFER_BIT);
+        }
 
         // 渲染场景
         renderScene(this->directionLightShadowShader, false);
+
+        if (SHADOW_ALGORITHM == 3) {
+            // 绑定均值和方差帧缓冲对象 pass2
+            glBindFramebuffer(GL_FRAMEBUFFER, this->d_d2_filter_FBO[i * 2]);
+            glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
+            glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+            // 使用均值和方差计算着色器
+            this->d_d2_filter_shader.use();
+            this->d_d2_filter_shader.setBool("vertical", false);
+            this->d_d2_filter_shader.setInt("d_d2", 0);
+            // 激活深度贴图
+            glActiveTexture(GL_TEXTURE0);
+            glBindTexture(GL_TEXTURE_2D, this->directionLightDepthMeanVarMaps[i]);
+            renderQuad();
+
+            // 绑定均值和方差帧缓冲对象 pass3
+            glBindFramebuffer(GL_FRAMEBUFFER, this->d_d2_filter_FBO[i * 2 + 1]);
+            glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
+            glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+            // 使用均值和方差计算着色器
+            this->d_d2_filter_shader.use();
+            this->d_d2_filter_shader.setBool("vertical", true);
+            this->d_d2_filter_shader.setInt("d_d2", 0);
+            // 激活深度贴图
+            glActiveTexture(GL_TEXTURE0);
+            glBindTexture(GL_TEXTURE_2D, this->d_d2_filter_maps[i * 2]);
+            renderQuad();
+        }
     }
     // 解绑帧缓冲对象
     glBindFramebuffer(GL_FRAMEBUFFER, 0);
@@ -340,10 +412,9 @@ void Scene::renderScene(Shader& shader, bool isActiveTexture) {
         shader.setMat4("model", model);
 
         // 绘制模型
-        modelInfo.model->draw(shader, this->directionLightDepthMaps, isActiveTexture);
+        modelInfo.model->draw(shader, this->directionLightDepthMaps, isActiveTexture, this->d_d2_filter_maps, SHADOW_ALGORITHM == 3);
     }
 }
-
 
 void Scene::processInputMoveDirLight() {
     // 定义方向变化的步长
@@ -404,4 +475,42 @@ void Scene::processInputMoveDirLight() {
     // if (directionalLights[1].direction.x > 3.0f) {
     //     directionalLights[1].direction.x = 3.0f;
     // }
+}
+
+void Scene::renderQuad() {
+    if (this->quadVAO == 0) {
+        float quadVertices[] = {
+            // 位置             // 纹理坐标
+            -1.0f, -1.0f, 0.0f,  0.0f, 0.0f, // 左下角
+             1.0f, -1.0f, 0.0f,  1.0f, 0.0f, // 右下角
+            -1.0f,  1.0f, 0.0f,  0.0f, 1.0f, // 左上角
+             1.0f,  1.0f, 0.0f,  1.0f, 1.0f, // 右上角
+        };
+        // 生成VAO
+        glGenVertexArrays(1, &this->quadVAO);
+        // 生成VBO
+        glGenBuffers(1, &this->quadVBO);
+        // 将VAO绑定到当前上下文
+        glBindVertexArray(this->quadVAO);
+        // 将VBO绑定到GL_ARRAY_BUFFER
+        glBindBuffer(GL_ARRAY_BUFFER, this->quadVBO);
+        // 将顶点数据复制到VBO
+        glBufferData(GL_ARRAY_BUFFER, sizeof(quadVertices), &quadVertices, GL_STATIC_DRAW);
+        // 设置顶点属性指针
+        // 位置属性
+        glEnableVertexAttribArray(0);
+        glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 5 * sizeof(float), (void*)0);
+        // 纹理坐标属性
+        glEnableVertexAttribArray(1);
+        glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, 5 * sizeof(float), (void*)(3 * sizeof(float)));
+        // 解绑VBO
+        glBindBuffer(GL_ARRAY_BUFFER, 0);
+        // 解绑VAO
+        glBindVertexArray(0);
+    }
+
+    // 绘制四边形
+    glBindVertexArray(this->quadVAO);
+    glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
+    glBindVertexArray(0);
 }

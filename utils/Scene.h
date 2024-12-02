@@ -83,25 +83,37 @@ private:
     static const unsigned int SCR_WIDTH = 800;
     static const unsigned int SCR_HEIGHT = 600;
     // 阴影贴图能够覆盖的最近距离
-    static constexpr float NEAR_PLANE = 1.0f;
+    static constexpr float NEAR_PLANE = 2.0f;
     // 阴影贴图能够覆盖的最远距离
-    static constexpr float FAR_PLANE = 90.0f;
+    static constexpr float FAR_PLANE = 120.0f;
     // 光源宽度，影响阴影的柔和度，较大的光源宽度会导致阴影边缘更加柔和
     static constexpr float lightWidth = 0.132f;
     // PCF采样半径
     static constexpr float PCFSampleRadius = 0.588f;
+    // 阴影算法类型
+    // 0: SM
+    // 1: PCF
+    // 2: PCSS
+    // 3: VSM
+    static const unsigned int SHADOW_ALGORITHM = 3;
 
     // 方向光阴影渲染着色器
     Shader directionLightShadowShader;
+    // 均值和方差计算着色器
+    Shader d_d2_filter_shader;
     // 点光源阴影渲染着色器
     // Shader pointLightShadowShader;
 
     vector<unsigned int> texture;
     GLFWWindowFactory* window;
     // 定向光帧缓冲对象
-    unsigned int directionLightDepthMapFBO;
+    vector<unsigned int> directionLightDepthMapFBOs;
     // 定向光深度贴图
     vector<unsigned int> directionLightDepthMaps;
+    // 定向光深度的方差和均值贴图
+    vector<unsigned int> directionLightDepthMeanVarMaps;
+    vector<unsigned int> d_d2_filter_FBO;
+    vector<unsigned int> d_d2_filter_maps;
 
     // 模型信息
     vector<ModelInfo> modelInfos;
@@ -109,6 +121,10 @@ private:
     int numDirectionalLights;
     // 点光源数组
     vector<PointLight> pointLights;
+
+    // 屏幕的渲染数据
+    GLuint quadVAO = 0;
+    GLuint quadVBO = 0;
 
 
     /// @brief 加载场景配置文件 
@@ -129,9 +145,10 @@ private:
     /// @param shader 使用的着色器
     /// @param isActiveTexture 是否激活纹理，一般是开启的，在渲染深度贴图时不开启（也就是从光源的视角渲染场景时
     void renderScene(Shader& shader, bool isActiveTexture);
-    // void loadDepthMap();
     /// @brief 处理输入，移动定向光
     void processInputMoveDirLight();
+    /// @brief 渲染整个屏幕，一般用于图像后期处理
+    void renderQuad();
 };
 
 #endif // SCENE_H

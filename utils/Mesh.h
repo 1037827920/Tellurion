@@ -64,7 +64,7 @@ public:
     }
 
     // 绘制函数
-    void draw(Shader& shader, vector<unsigned int> directionLightDepthMaps, bool isActiveTexture) {
+    void draw(Shader& shader, vector<unsigned int> directionLightDepthMaps, bool isActiveTexture, vector<unsigned int> d_d2_filter_maps, bool is_d_d2) {
         // 是否激活纹理
         if (isActiveTexture) {
             unsigned int diffuseNr = 0;
@@ -112,11 +112,23 @@ public:
                 shader.setBool("material" + number + ".sampleSpecularMap", name == "texture_specular");
             }
 
-            // 设置定向光深度贴图
-            for (int j = 0; j < directionLightDepthMaps.size(); j++) {
-                glActiveTexture(GL_TEXTURE0 + i + j);
-                glBindTexture(GL_TEXTURE_2D, directionLightDepthMaps[j]);
-                shader.setInt("directionalLights[" + std::to_string(j) + "].shadowMap", i + j);
+            int j = 0;
+            if (!is_d_d2) {
+                // 设置定向光深度贴图
+                for (; j < directionLightDepthMaps.size(); j++) {
+                    glActiveTexture(GL_TEXTURE0 + i + j);
+                    glBindTexture(GL_TEXTURE_2D, directionLightDepthMaps[j]);
+                    shader.setInt("directionalLights[" + std::to_string(j) + "].shadowMap", i + j);
+                }
+            }
+            else {
+                // 设置定向光均值和方差贴图
+                for (; j * 2 + 1 < d_d2_filter_maps.size(); j++) {
+                    glActiveTexture(GL_TEXTURE0 + i + j);
+                    glBindTexture(GL_TEXTURE_2D, d_d2_filter_maps[j * 2 + 1]);
+                    shader.setInt("directionalLights[" + std::to_string(j) + "].d_d2_filter", i + j);
+                }
+
             }
         }
 

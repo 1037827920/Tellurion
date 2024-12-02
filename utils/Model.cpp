@@ -2,10 +2,10 @@
 // #define STB_IMAGE_IMPLEMENTATION
 #include <stb_image.h>
 
-void Model::draw(Shader& shader, vector<unsigned int> directionLightDepthMaps, bool isActiveTexture) {
+void Model::draw(Shader& shader, vector<unsigned int> directionLightDepthMaps, bool isActiveTexture, vector<unsigned int> d_d2_filter_maps, bool is_d_d2) {
     // 遍历所有网格，并调用它们各自的draw函数
     for (unsigned int i = 0; i < meshes.size(); i++) {
-        meshes[i].draw(shader, directionLightDepthMaps, isActiveTexture);
+        meshes[i].draw(shader, directionLightDepthMaps, isActiveTexture, d_d2_filter_maps, is_d_d2);
     }
 }
 

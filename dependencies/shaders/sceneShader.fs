@@ -54,6 +54,8 @@ struct DirLight{
     mat4 lightSpaceMatrix;
     // 阴影贴图
     sampler2D shadowMap;
+    // 阴影方差与均值贴图
+    sampler2D d_d2_filter;
 };
 
 struct PointLight{
@@ -78,6 +80,10 @@ uniform DirLight directionalLights[MAX_DIRECTIONAL_LIGHTS];
 uniform float lightWidth;
 // PCF采样半径
 uniform float PCFSampleRadius;
+// 近裁剪面
+uniform float near_plane;
+// 远裁剪面
+uniform float far_plane;
 
 #define NR_POINT_LIGHTS 4
 uniform int numPointLights;
@@ -91,10 +97,6 @@ float currentDepth;
 #define PCF_RADIUS 6
 // 块半径
 #define BLOCK_RADIUS 5
-// 近裁剪面
-#define NEAR_PLANE 2.
-// 远裁剪面
-#define FAR_PLANE 50.
 
 // 计算定向光贡献
 vec3 CalcDirLight(DirLight light,vec3 normal,vec3 viewDir);
@@ -112,6 +114,11 @@ float PCSS(vec4 fragPosLightSpace,vec3 normal,vec3 lightDir,sampler2D shadowMap)
 // shadowMap: 阴影贴图
 // bias: 阴影偏移量
 float findBlocker(vec2 uv,float zReceiver,sampler2D shadowMap,float bias);
+// 使用VSM计算阴影
+float VSM(vec4 fragPosLightSpace,vec3 normal,vec3 lightDir,sampler2D d_d2_filter);
+
+vec2 d_d2;
+float depth;
 
 void main()
 {
@@ -144,12 +151,14 @@ void main()
     FragColor=vec4(result,1.);
     
     // DEBUG：测试阴影贴图
-    // float temp=ShadowCalculation(FragPosLightSpace);
+    // vec4 FragPosLightSpace=directionalLights[0].lightSpaceMatrix*vec4(FragPos,1.);
+    // float temp=VSM(FragPosLightSpace, norm, viewDir, directionalLights[0].d_d2_filter);
     // FragColor=vec4(vec3(1.-temp),1.);
+    // DEBUG：VSM，显示光源视角的深度值
+    // FragColor=vec4(vec3(d_d2.x),1.);
 }
 
-vec3 CalcDirLight(DirLight light,vec3 normal,vec3 viewDir)
-{
+vec3 CalcDirLight(DirLight light,vec3 normal,vec3 viewDir){
     vec3 lightDir=normalize(-light.direction);
     // diffuse shading
     float diff=max(dot(normal,lightDir),0.);
@@ -172,22 +181,23 @@ vec3 CalcDirLight(DirLight light,vec3 normal,vec3 viewDir)
     // 计算阴影
     vec4 FragPosLightSpace=light.lightSpaceMatrix*vec4(FragPos,1.);
     float shadow;
-    if (shadowMapType==0){
+    if(shadowMapType==0){
         shadow=SM(FragPosLightSpace,normal,lightDir,light.shadowMap);
     }
-    else if (shadowMapType==1){
+    else if(shadowMapType==1){
         shadow=PCF(FragPosLightSpace,normal,lightDir,light.shadowMap);
     }
-    else if (shadowMapType==2){
+    else if(shadowMapType==2){
         shadow=PCSS(FragPosLightSpace,normal,lightDir,light.shadowMap);
     }
-
-
+    else if(shadowMapType==3){
+        shadow=VSM(FragPosLightSpace,normal,lightDir,light.d_d2_filter);
+    }
+    
     return(ambient+(1.-shadow)*(diffuse+specular));
 }
 
-vec3 CalcPointLight(PointLight light,vec3 normal,vec3 fragPos,vec3 viewDir)
-{
+vec3 CalcPointLight(PointLight light,vec3 normal,vec3 fragPos,vec3 viewDir){
     vec3 lightDir=normalize(light.position-fragPos);
     // diffuse shading
     float diff=max(dot(normal,lightDir),0.);
@@ -298,7 +308,7 @@ float PCSS(vec4 fragPosLightSpace,vec3 normal,vec3 lightDir,sampler2D shadowMap)
     // 半影大小
     float penumbra=(currentDepth-avgDepth)/avgDepth*lightWidth;
     // 采样半径
-    float filterRadius=penumbra*NEAR_PLANE/currentDepth;
+    float filterRadius=penumbra*near_plane/currentDepth;
     // PCF
     filterRadius*=PCFSampleRadius;
     float shadow=0.;
@@ -351,4 +361,32 @@ float findBlocker(vec2 uv,float zReceiver,sampler2D shadowMap,float bias){
     
     // 返回遮挡者的平均深度值
     return ret/blockers;
+}
+
+float VSM(vec4 fragPosLightSpace,vec3 normal,vec3 lightDir,sampler2D d_d2_filter){
+    vec3 projCoords=fragPosLightSpace.xyz/fragPosLightSpace.w;
+    // [-1, 1] => [0, 1]
+    projCoords=projCoords*.5+.5;
+    if(projCoords.z>1.||projCoords.z<0.)
+    return 0.;
+    
+    depth=projCoords.z;
+    
+    // 从模糊后的纹理中获得深度值均值和方差
+    d_d2=texture(d_d2_filter,projCoords.xy).rg;
+    float var=d_d2.y-d_d2.x*d_d2.x;// E(X-EX)^2 = EX^2-E^2X
+    
+    // 偏移量，解决阴影失真的问题, 根据表面朝向光线的角度更改偏移量
+    float bias=max(.05*(1.-dot(normal,lightDir)),.005);
+    // float bias=.005;
+    float visibility;
+    if(depth-bias<d_d2.x){
+        visibility=1.;// 没有阴影
+    }
+    else{
+        // 使用切比雪夫不等式计算阴影
+        float t_minus_mu=depth-d_d2.x;
+        visibility=var/(var+t_minus_mu*t_minus_mu);
+    }
+    return 1.-visibility;
 }
