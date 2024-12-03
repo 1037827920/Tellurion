@@ -1,7 +1,7 @@
 # 设置CMake的最低版本要求
 cmake_minimum_required(VERSION 3.10)
 # 设置项目名称
-project(Object)
+project(Tellurion)
 
 # vcpkg集成, 这里要换成你自己的vcpkg工具链文件和共享库路径
 set(VCPKG_ROOT D:/software6/vcpkg/)
@@ -19,15 +19,15 @@ find_package(yaml-cpp CONFIG REQUIRED)
 file(GLOB UTILS "utils/*.cpp", "utils/*.h")
 
 # 添加可执行文件（还要加入utils文件夹下的源文件）
-add_executable(Object main.cpp ${UTILS})
+add_executable(Tellurion main.cpp ${UTILS})
 
 # 链接所需的库
-target_link_libraries(Object PRIVATE glad::glad glfw glm::glm assimp::assimp yaml-cpp::yaml-cpp)
+target_link_libraries(Tellurion PRIVATE glad::glad glfw glm::glm assimp::assimp yaml-cpp::yaml-cpp)
 
 # 检查项目是否有dependeicies目录，如果存在，则在使用add_custom_command命令在构建后将dependencies目录中的文件复制到项目的输出目录
 set(SOURCE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/dependencies")
 if(EXISTS ${SOURCE_DIR})
-    add_custom_command(TARGET Object POST_BUILD
+    add_custom_command(TARGET Tellurion POST_BUILD
         COMMAND ${CMAKE_COMMAND} -E copy_directory
-        ${SOURCE_DIR} $<TARGET_FILE_DIR:Object>)
+        ${SOURCE_DIR} $<TARGET_FILE_DIR:Tellurion>)
 endif()
