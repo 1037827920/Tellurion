@@ -22,7 +22,7 @@ Tellurion 是一个基于 OpenGL 实现的地球仪渲染项目，旨在展示�
 
 **运行项目:**
 
-- windows 11: 双击bin目录中的`Tellurion.exe`可执行文件即可
+- windows 11: 下载[release版本](https://github.com/1037827920/Tellurion/releases/tag/v1.0.0)解压缩后运行
 
 - 移动摄像机：w、s、a、d
 
@@ -60,7 +60,6 @@ Tellurion 是一个基于 OpenGL 实现的地球仪渲染项目，旨在展示�
   - config: 场景布局，光照数据
   - shaders: 顶点/片段着色器源码
 - CMakeLists: 构建项目的配置
-- bin: 可执行文件
 
 # 参考
 
