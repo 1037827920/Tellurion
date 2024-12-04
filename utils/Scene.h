@@ -3,7 +3,6 @@
 
 // 定义了Scene类，用来加载场景中的模型
 
-#include "windowFactory.h"
 #include <glad/glad.h>
 #include "shader.h"
 #include <vector>
@@ -12,7 +11,11 @@
 #include <glm/glm.hpp>
 #include <glm/gtc/matrix_transform.hpp>
 #include <glm/gtc/type_ptr.hpp>
+#include <stdlib.h>
+
+#include "windowFactory.h"
 #include "model.h"
+
 
 using std::vector;
 
@@ -64,8 +67,6 @@ class Scene {
         Material material;
     };
 public:
-    // 场景渲染着色器
-    Shader shader;
     // 定向光数组
     vector<DirectionalLight> directionalLights;
 
@@ -78,10 +79,14 @@ public:
 
     ~Scene();
 private:
-    static const unsigned int SHADOW_WIDTH = 1024;
-    static const unsigned int SHADOW_HEIGHT = 1024;
+    // 屏幕的宽度和
     static const unsigned int SCR_WIDTH = 800;
+    // 屏幕的高度
     static const unsigned int SCR_HEIGHT = 600;
+    // 阴影贴图的宽度
+    static const unsigned int SHADOW_WIDTH = 1024;
+    // 阴影贴图的高度
+    static const unsigned int SHADOW_HEIGHT = 1024;
     // 阴影贴图能够覆盖的最近距离
     static constexpr float NEAR_PLANE = 2.0f;
     // 阴影贴图能够覆盖的最远距离
@@ -95,16 +100,24 @@ private:
     // 1: PCF
     // 2: PCSS
     // 3: VSM
-    static const unsigned int SHADOW_ALGORITHM = 3;
+    static const unsigned int SHADOW_ALGORITHM = 1;
+    // 光照贴图的宽度
+    unsigned int LIGHT_MAP_WIDTH = 1024;
+    // 光照贴图的高度
+    unsigned int LIGHT_MAP_HEIGHT = 1024;
+    // 是否使用光线烘焙
+    const bool BAKE = false;
 
+
+    // 场景渲染着色器
+    Shader shader;
     // 方向光阴影渲染着色器
     Shader directionLightShadowShader;
     // 均值和方差计算着色器
     Shader d_d2_filter_shader;
-    // 点光源阴影渲染着色器
-    // Shader pointLightShadowShader;
+    // 光照贴图着色器
+    Shader lightMapShader;
 
-    vector<unsigned int> texture;
     GLFWWindowFactory* window;
     // 定向光帧缓冲对象
     vector<unsigned int> directionLightDepthMapFBOs;
@@ -126,6 +139,12 @@ private:
     GLuint quadVAO = 0;
     GLuint quadVBO = 0;
 
+    // 光照贴图
+    unsigned int lightMap;
+    // 顶点数据
+    vector<vertex_t> vertices;
+    // 索引数据
+    vector<unsigned int> indices;
 
     /// @brief 加载场景配置文件 
     /// @param fileName 文件名
@@ -139,8 +158,13 @@ private:
     /// @param fileName 文件名
     /// @return 返回点光源信息
     vector<PointLight> loadPointLights(const std::string& fileName);
+    /// @brief 加载定向光深度贴图
     void loadDirectionLightDepthMap();
+    /// @brief 加载光照贴图
+    void loadLightMap();
     void renderSceneToDepthMap();
+    /// @brief 设置场景的统一变量
+    void setupSceneUniform();
     /// @brief 渲染场景
     /// @param shader 使用的着色器
     /// @param isActiveTexture 是否激活纹理，一般是开启的，在渲染深度贴图时不开启（也就是从光源的视角渲染场景时
@@ -149,6 +173,8 @@ private:
     void processInputMoveDirLight();
     /// @brief 渲染整个屏幕，一般用于图像后期处理
     void renderQuad();
+    /// @brief 光照贴图烘培函数
+    int bakeLightMap();
 };
 
 #endif // SCENE_H

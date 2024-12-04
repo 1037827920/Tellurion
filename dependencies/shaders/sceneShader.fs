@@ -89,6 +89,9 @@ uniform float far_plane;
 uniform int numPointLights;
 uniform PointLight pointLights[NR_POINT_LIGHTS];
 
+uniform bool useLightMap;
+uniform sampler2D lightMap;
+
 // 存储了从光源视角看当前fragment位置的深度值，这个深度值是从阴影贴图中采样得到的，用于判断当前fragment是否在阴影中
 float closestDepth;
 // 存储了从摄像机是将看当前fragment位置的深度值，这个深度值计算是在摄像机移动时计算的
@@ -137,16 +140,16 @@ void main()
     vec3 norm=normalize(sampledNormal);
     vec3 viewDir=normalize(viewPos-FragPos);
     
-    // 1. 计算所有方向光的贡献
+    if (useLightMap)
+    {
+        FragColor = vec4(texture(lightMap, TexCoords).rgb, gl_FrontFacing ? 1.0 : 0.0);
+        return;
+    }
+
+    // 计算所有方向光的贡献
     vec3 result=vec3(0.);
     for(int i=0;i<numDirectionalLights;i++)
     result+=CalcDirLight(directionalLights[i],norm,viewDir);
-    
-    // 2. 计算所有点光源的贡献
-    // for(int i=0;i<numPointLights;i++)
-    // result+=CalcPointLight(pointLights[i],norm,FragPos,viewDir);
-    // 3. Spot light
-    //result += CalcSpotLight(spotLight, norm, FragPos, viewDir);
     
     FragColor=vec4(result,1.);
     

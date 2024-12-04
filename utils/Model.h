@@ -17,6 +17,11 @@ using std::vector;
 using std::string;
 using std::cout;
 using std::endl;
+// 定义顶点结构体，包含位置和纹理坐标
+typedef struct {
+    float p[3]; // 位置
+    float t[2]; // 纹理坐标
+} vertex_t;
 
 class Model {
 public:
@@ -28,21 +33,21 @@ public:
     string directory;
 
     // 构造函数
-    Model(string const& path) {
-        loadModel(path);
+    Model(string const& path, vector<vertex_t>& lightVertices, vector<unsigned int>& lightIndices) {
+        loadModel(path, lightVertices, lightIndices);
     }
 
     // 绘制函数
-    void draw(Shader& shader, vector<unsigned int> directionLightDepthMaps, bool isActiveTexture, vector<unsigned int> d_d2_filter_maps, bool is_d_d2);
+    void draw(Shader& shader, vector<unsigned int> directionLightDepthMaps, bool isActiveTexture, vector<unsigned int> d_d2_filter_maps, bool is_d_d2, bool isLightMap, unsigned int lightMap);
 
 private:
 
     // 加载模型
-    void loadModel(string path);
+    void loadModel(string path, vector<vertex_t>& lightVertices, vector<unsigned int>& lightIndices);
     // 处理节点
-    void processNode(aiNode* node, const aiScene* scene);
+    void processNode(aiNode* node, const aiScene* scene, vector<vertex_t>& lightVertices, vector<unsigned int>& lightIndices);
     // 处理网格
-    Mesh processMesh(aiMesh* mesh, const aiScene* scene);
+    Mesh processMesh(aiMesh* mesh, const aiScene* scene, vector<vertex_t>& lightVertices, vector<unsigned int>& lightIndices);
     // 加载材质纹理
     vector<Texture> loadMaterialTextures(aiMaterial* mat, aiTextureType type, string typeName);
 };

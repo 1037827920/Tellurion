@@ -4,6 +4,10 @@
 #include "yaml-cpp/yaml.h"
 #define STB_IMAGE_IMPLEMENTATION
 #include "stb_image.h"
+// 导入库
+#define LIGHTMAPPER_IMPLEMENTATION
+#define LM_DEBUG_INTERPOLATION
+#include "lightmapper.h"
 
 Scene::Scene(GLFWWindowFactory* window) :window(window) {
     // 加载定向光配置
@@ -14,6 +18,7 @@ Scene::Scene(GLFWWindowFactory* window) :window(window) {
     // 加载场景配置
     this->modelInfos = loadScene("config/scene.yaml");
 
+    /// 阴影深度贴图处理
     // 给directionLightDepthMapFBOs分配大小
     this->directionLightDepthMapFBOs.resize(this->numDirectionalLights);
     // 给directionLightDepthMaps分配大小
@@ -25,10 +30,14 @@ Scene::Scene(GLFWWindowFactory* window) :window(window) {
     // 加载深度贴图
     loadDirectionLightDepthMap();
 
+    /// 光照贴图处理
+    // 加载光照贴图
+    loadLightMap();
+
     // 为每个模型信息加载模型
     for (auto& modelInfo : modelInfos) {
-        // 加载模型
-        modelInfo.model = new Model(modelInfo.path);
+
+        modelInfo.model = new Model(modelInfo.path, vertices, indices);
     }
 
     // 初始化着色器
@@ -37,6 +46,8 @@ Scene::Scene(GLFWWindowFactory* window) :window(window) {
     this->directionLightShadowShader = Shader("shaders/directionLightShadowShader.vs", "shaders/directionLightShadowShader.fs");
     // 初始化均值方差计算着色器
     this->d_d2_filter_shader = Shader("shaders/vsmShader.vs", "shaders/vsmShader.fs");
+    // 初始化光照贴图着色器
+    this->lightMapShader = Shader("shaders/lightMapShader.vs", "shaders/lightMapShader.fs");
 }
 
 Scene::~Scene() {
@@ -45,71 +56,38 @@ Scene::~Scene() {
 void Scene::draw() {
     // 处理输入
     processInputMoveDirLight();
+    if (BAKE) {
+        static int baking = 0; // 添加一个标志
+        if (glfwGetKey(this->window->window, GLFW_KEY_SPACE) == GLFW_PRESS && !baking) {
+            baking = 1; // 设置标志
+            cout << "baking" << endl;
+            bakeLightMap();
+        }
+        if (glfwGetKey(this->window->window, GLFW_KEY_SPACE) == GLFW_RELEASE) {
+            baking = 0; // 重置标志
+        }
+    }
 
-    // 解决悬浮(pater panning)的阴影失真问题
-    // 告诉opengl剔除正面
-    glCullFace(GL_FRONT);
     // 渲染深度贴图
     renderSceneToDepthMap();
-    // 恢复剔除背面
-    glCullFace(GL_BACK);
+
+    this->shader.use();
+    if (BAKE) {
+        // 使用光照贴图
+        this->shader.setBool("useLightMap", true);
+    }
+    else {
+        // 不使用光照贴图
+        this->shader.setBool("useLightMap", false);
+    }
+
+    // 设置场景着色器uniform变量
+    setupSceneUniform();
 
     // 切换回默认视口
     glViewport(0, 0, this->SCR_WIDTH, this->SCR_HEIGHT);
     glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-
-    // -- 场景着色器配置 -- 
-    this->shader.use();
-    // 传递方向光数量给着色器
-    this->shader.setInt("numDirectionalLights", this->numDirectionalLights);
-    // 传递每个方向光的属性给着色器
-    for (auto i = 0; i < this->numDirectionalLights; i++) {
-        std::string number = std::to_string(i);
-        this->shader.setVec3("directionalLights[" + number + "].direction", this->directionalLights[i].direction);
-        this->shader.setVec3("directionalLights[" + number + "].ambient", this->directionalLights[i].ambient);
-        this->shader.setVec3("directionalLights[" + number + "].diffuse", this->directionalLights[i].diffuse);
-        this->shader.setVec3("directionalLights[" + number + "].specular", this->directionalLights[i].specular);
-        this->shader.setVec3("directionalLights[" + number + "].lightColor", this->directionalLights[i].lightColor);
-        // 将阴影矩阵传递给着色器
-        this->shader.setMat4("directionalLights[" + number + "].lightSpaceMatrix", this->directionalLights[i].lightSpaceMatrix);
-    }
-    // 传递点光源数量给着色器
-    this->shader.setInt("numPointLights", pointLights.size());
-    // 传递每个点光源的属性给着色器
-    for (auto i = 0; i < pointLights.size(); i++) {
-        std::string number = std::to_string(i);
-        this->shader.setVec3("pointLights[" + number + "].position", pointLights[i].position);
-        this->shader.setVec3("pointLights[" + number + "].ambient", pointLights[i].ambient);
-        this->shader.setVec3("pointLights[" + number + "].diffuse", pointLights[i].diffuse);
-        this->shader.setVec3("pointLights[" + number + "].specular", pointLights[i].specular);
-        this->shader.setFloat("pointLights[" + number + "].constant", pointLights[i].constant);
-        this->shader.setFloat("pointLights[" + number + "].linear", pointLights[i].linear);
-        this->shader.setFloat("pointLights[" + number + "].quadratic", pointLights[i].quadratic);
-        this->shader.setVec3("pointLights[" + number + "].lightColor", pointLights[i].lightColor);
-    }
-    // 当按下键1时，切换Blinn-Phong着色模式(将blinn传递给着色器)
-    if (window->blinn) {
-        this->shader.setInt("blinn", 1);
-    }
-    else {
-        this->shader.setInt("blinn", 0);
-    }
-    // 传递投影矩阵和视图矩阵给着色器
-    this->shader.setMat4("projection", window->getProjectionMatrix());
-    this->shader.setMat4("view", window->getViewMatrix());
-    auto camera = window->camera;
-    // 传递摄像机位置给着色器
-    this->shader.setVec3("viewPos", camera.Position);
-    // 传递光源宽度给着色器
-    this->shader.setFloat("lightWidth", this->lightWidth);
-    // 将PCF采样半径传递给着色器
-    this->shader.setFloat("PCFSampleRadius", this->PCFSampleRadius);
-    // 设置阴影映射算法类型
-    this->shader.setInt("shadowMapType", SHADOW_ALGORITHM);
-    // 将近平面和远平面传递给着色器
-    this->shader.setFloat("near_plane", NEAR_PLANE);
-    this->shader.setFloat("far_plane", FAR_PLANE);
 
     // 渲染场景
     renderScene(this->shader, true);
@@ -216,7 +194,6 @@ std::vector<Scene::PointLight> Scene::loadPointLights(const std::string& fileNam
     return pointLights;
 }
 
-// 加载定向光深度贴图
 void Scene::loadDirectionLightDepthMap() {
     for (int i = 0; i < this->numDirectionalLights; ++i) {
         // 创建帧缓冲对象
@@ -309,6 +286,9 @@ void Scene::loadDirectionLightDepthMap() {
 }
 
 void Scene::renderSceneToDepthMap() {
+    // 解决悬浮(pater panning)的阴影失真问题
+    // 告诉opengl剔除正面
+    glCullFace(GL_FRONT);
     // 投影矩阵
     // 阴影贴图覆盖的实际范围(正交投影)
     float edge = 120.0f;
@@ -377,8 +357,11 @@ void Scene::renderSceneToDepthMap() {
             renderQuad();
         }
     }
+
     // 解绑帧缓冲对象
     glBindFramebuffer(GL_FRAMEBUFFER, 0);
+    // 恢复剔除背面
+    glCullFace(GL_BACK);
 }
 
 void Scene::renderScene(Shader& shader, bool isActiveTexture) {
@@ -404,7 +387,8 @@ void Scene::renderScene(Shader& shader, bool isActiveTexture) {
             model = glm::rotate(model, glm::radians(tiltAngle), glm::vec3(0.0f, 0.0f, 1.0f));
 
             // 动态旋转（绕y轴旋转
-            model = glm::rotate(model, glm::radians(angle), glm::vec3(0.0f, 1.0f, 0.0f));
+            if (!BAKE)
+                model = glm::rotate(model, glm::radians(angle), glm::vec3(0.0f, 1.0f, 0.0f));
         }
         // 缩放模型
         model = glm::scale(model, modelInfo.scale);
@@ -412,7 +396,7 @@ void Scene::renderScene(Shader& shader, bool isActiveTexture) {
         shader.setMat4("model", model);
 
         // 绘制模型
-        modelInfo.model->draw(shader, this->directionLightDepthMaps, isActiveTexture, this->d_d2_filter_maps, SHADOW_ALGORITHM == 3);
+        modelInfo.model->draw(shader, this->directionLightDepthMaps, isActiveTexture, this->d_d2_filter_maps, SHADOW_ALGORITHM == 3, BAKE, lightMap);
     }
 }
 
@@ -513,4 +497,160 @@ void Scene::renderQuad() {
     glBindVertexArray(this->quadVAO);
     glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
     glBindVertexArray(0);
+}
+
+void Scene::setupSceneUniform() {
+    // -- 场景着色器配置 -- 
+    this->shader.use();
+    // 传递方向光数量给着色器
+    this->shader.setInt("numDirectionalLights", this->numDirectionalLights);
+    // 传递每个方向光的属性给着色器
+    for (auto i = 0; i < this->numDirectionalLights; i++) {
+        std::string number = std::to_string(i);
+        this->shader.setVec3("directionalLights[" + number + "].direction", this->directionalLights[i].direction);
+        this->shader.setVec3("directionalLights[" + number + "].ambient", this->directionalLights[i].ambient);
+        this->shader.setVec3("directionalLights[" + number + "].diffuse", this->directionalLights[i].diffuse);
+        this->shader.setVec3("directionalLights[" + number + "].specular", this->directionalLights[i].specular);
+        this->shader.setVec3("directionalLights[" + number + "].lightColor", this->directionalLights[i].lightColor);
+        // 将阴影矩阵传递给着色器
+        this->shader.setMat4("directionalLights[" + number + "].lightSpaceMatrix", this->directionalLights[i].lightSpaceMatrix);
+    }
+    // 传递点光源数量给着色器
+    this->shader.setInt("numPointLights", pointLights.size());
+    // 传递每个点光源的属性给着色器
+    for (auto i = 0; i < pointLights.size(); i++) {
+        std::string number = std::to_string(i);
+        this->shader.setVec3("pointLights[" + number + "].position", pointLights[i].position);
+        this->shader.setVec3("pointLights[" + number + "].ambient", pointLights[i].ambient);
+        this->shader.setVec3("pointLights[" + number + "].diffuse", pointLights[i].diffuse);
+        this->shader.setVec3("pointLights[" + number + "].specular", pointLights[i].specular);
+        this->shader.setFloat("pointLights[" + number + "].constant", pointLights[i].constant);
+        this->shader.setFloat("pointLights[" + number + "].linear", pointLights[i].linear);
+        this->shader.setFloat("pointLights[" + number + "].quadratic", pointLights[i].quadratic);
+        this->shader.setVec3("pointLights[" + number + "].lightColor", pointLights[i].lightColor);
+    }
+    // 当按下键1时，切换Blinn-Phong着色模式(将blinn传递给着色器)
+    if (window->blinn) {
+        this->shader.setInt("blinn", 1);
+    }
+    else {
+        this->shader.setInt("blinn", 0);
+    }
+    // 传递投影矩阵和视图矩阵给着色器
+    this->shader.setMat4("projection", window->getProjectionMatrix());
+    this->shader.setMat4("view", window->getViewMatrix());
+    auto camera = window->camera;
+    // 传递摄像机位置给着色器
+    this->shader.setVec3("viewPos", camera.Position);
+    // 传递光源宽度给着色器
+    this->shader.setFloat("lightWidth", this->lightWidth);
+    // 将PCF采样半径传递给着色器
+    this->shader.setFloat("PCFSampleRadius", this->PCFSampleRadius);
+    // 设置阴影映射算法类型
+    this->shader.setInt("shadowMapType", SHADOW_ALGORITHM);
+    // 将近平面和远平面传递给着色器
+    this->shader.setFloat("near_plane", NEAR_PLANE);
+    this->shader.setFloat("far_plane", FAR_PLANE);
+}
+
+void Scene::loadLightMap() {
+    // 生成光照贴图
+    glGenTextures(1, &this->lightMap);
+    // 绑定光照贴图
+    glBindTexture(GL_TEXTURE_2D, this->lightMap);
+    // 设置光照贴图环绕和过滤方式
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+
+    unsigned char emissive[] = { 0, 0, 0, 255 };
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, 1, 1, 0, GL_RGBA, GL_UNSIGNED_BYTE, emissive);
+}
+
+int Scene::bakeLightMap() {
+    // lmCrate用于创建一个光照映射的上下文
+    lm_context* ctx = lmCreate(
+        512,               // 表示渲染质量或分辨率，通常越大越精细，但也会增加计算开销
+        0.001f, 10.0f,   // 定义了渲染的近裁剪面和远裁剪面
+        1.0f, 1.0f, 1.0f, // 定义环境光颜色
+        5, 0.0001f,         // 定义了层次选择性插值的设置，用于加速计算，2代表迭代次数，0.01f是阈值，用于决定何时进行插值
+        0.0f);            // 用于影响从摄像机到表面距离的计算，帮助光照贴图计算中权衡质量和性能
+
+    // 初始化失败
+    if (!ctx) {
+        fprintf(stderr, "Error: Could not initialize lightmapper.\n");
+        return 0;
+    }
+
+    // 分配内存用于存储光照贴图数据
+    float* data = (float*)calloc(LIGHT_MAP_WIDTH * LIGHT_MAP_HEIGHT * 4, sizeof(float));
+    // 设置目标光照贴图
+    lmSetTargetLightmap(ctx, data, LIGHT_MAP_WIDTH, LIGHT_MAP_HEIGHT, 4);
+
+    // 设置几何数据
+    // 输出scene->vertices大小
+    printf("verticeCount: %d\n", this->vertices.size());
+    // 输出scene->indexCount大小
+    printf("indexCount: %d\n", this->indices.size());
+    lmSetGeometry(ctx, NULL,                                                                 // no transformation in this example
+        LM_FLOAT, (unsigned char*)(vertices.data()) + offsetof(vertex_t, p), sizeof(vertex_t),
+        LM_NONE, NULL, 0, // 不使用插值法线
+        LM_FLOAT, (unsigned char*)(vertices.data()) + offsetof(vertex_t, t), sizeof(vertex_t),
+        indices.size(), LM_UNSIGNED_SHORT, indices.data());
+
+    int vp[4];
+    float view[16], projection[16];
+    double lastUpdateTime = 0.0;
+    while (lmBegin(ctx, vp, view, projection)) {
+        // 渲染到光照贴图帧缓冲区
+        glViewport(vp[0], vp[1], vp[2], vp[3]);
+
+        // 将视图矩阵传递给着色器
+        this->shader.use();
+        this->shader.setMat4("view", glm::make_mat4(view));
+        // 将投影矩阵传递给着色器
+        this->shader.setMat4("projection", glm::make_mat4(projection));
+
+        // 渲染场景
+        renderScene(this->shader, false);
+
+        // 每秒显示进度
+        double time = glfwGetTime();
+        if (time - lastUpdateTime > 1.0) {
+            lastUpdateTime = time;
+            printf("\r%6.2f%%", lmProgress(ctx) * 100.0f);
+            fflush(stdout);
+        }
+
+        lmEnd(ctx);
+    }
+    printf("\rFinished baking %d triangles.\n", indices.size() / 3);
+
+    // 销毁光照贴图上下文
+    lmDestroy(ctx);
+
+    // 后处理纹理
+    float* temp = (float*)calloc(LIGHT_MAP_WIDTH * LIGHT_MAP_HEIGHT * 4, sizeof(float));
+    for (int i = 0; i < 16; i++) {
+        lmImageDilate(data, temp, LIGHT_MAP_WIDTH, LIGHT_MAP_HEIGHT, 4);
+        lmImageDilate(temp, data, LIGHT_MAP_WIDTH, LIGHT_MAP_HEIGHT, 4);
+    }
+    lmImageSmooth(data, temp, LIGHT_MAP_WIDTH, LIGHT_MAP_HEIGHT, 4);
+    lmImageSmooth(data, temp, LIGHT_MAP_WIDTH, LIGHT_MAP_HEIGHT, 4);
+
+    lmImageDilate(temp, data, LIGHT_MAP_WIDTH, LIGHT_MAP_HEIGHT, 4);
+    lmImagePower(data, LIGHT_MAP_WIDTH, LIGHT_MAP_HEIGHT, 4, 1.0f / 2.2f, 0x7); // 伽马矫正颜色通道
+    free(temp);
+
+    // 保存结果到文件
+    if (lmImageSaveTGAf("result.tga", data, LIGHT_MAP_WIDTH, LIGHT_MAP_HEIGHT, 4, 1.0f))
+        printf("Saved result.tga\n");
+
+    // 上传结果到opengl纹理
+    glBindTexture(GL_TEXTURE_2D, lightMap);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, LIGHT_MAP_WIDTH, LIGHT_MAP_HEIGHT, 0, GL_RGBA, GL_FLOAT, data);
+    free(data);
+
+    return 1;
 }

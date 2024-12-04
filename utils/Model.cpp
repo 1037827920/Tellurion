@@ -2,14 +2,14 @@
 // #define STB_IMAGE_IMPLEMENTATION
 #include <stb_image.h>
 
-void Model::draw(Shader& shader, vector<unsigned int> directionLightDepthMaps, bool isActiveTexture, vector<unsigned int> d_d2_filter_maps, bool is_d_d2) {
+void Model::draw(Shader& shader, vector<unsigned int> directionLightDepthMaps, bool isActiveTexture, vector<unsigned int> d_d2_filter_maps, bool is_d_d2, bool isLightMap, unsigned int lightMap) {
     // 遍历所有网格，并调用它们各自的draw函数
     for (unsigned int i = 0; i < meshes.size(); i++) {
-        meshes[i].draw(shader, directionLightDepthMaps, isActiveTexture, d_d2_filter_maps, is_d_d2);
+        meshes[i].draw(shader, directionLightDepthMaps, isActiveTexture, d_d2_filter_maps, is_d_d2, isLightMap, lightMap);
     }
 }
 
-void Model::loadModel(string path) {
+void Model::loadModel(string path, vector<vertex_t>& lightVertices, vector<unsigned int>& lightIndices) {
     // 读取文件，将模型数据存储在scene中
     Assimp::Importer importer;
     // 预处理参数
@@ -30,23 +30,23 @@ void Model::loadModel(string path) {
     // 递归处理场景中的每个节点
     // 每个节点包含了一系列的网格索引
     // 每个索引指向场景对象中的那个特定网格
-    this->processNode(scene->mRootNode, scene);
+    this->processNode(scene->mRootNode, scene, lightVertices, lightIndices);
 }
 
-void Model::processNode(aiNode* node, const aiScene* scene) {
+void Model::processNode(aiNode* node, const aiScene* scene, vector<vertex_t>& lightVertices, vector<unsigned int>& lightIndices) {
     // 处理节点的所有网格(如果有的话)
     for (unsigned int i = 0; i < node->mNumMeshes; i++) {
         aiMesh* meshes = scene->mMeshes[node->mMeshes[i]];
-        this->meshes.push_back(this->processMesh(meshes, scene));
+        this->meshes.push_back(this->processMesh(meshes, scene, lightVertices, lightIndices));
     }
 
     // 对它的子节点重复这一过程
     for (unsigned int i = 0; i < node->mNumChildren; i++) {
-        this->processNode(node->mChildren[i], scene);
+        this->processNode(node->mChildren[i], scene, lightVertices, lightIndices);
     }
 }
 
-Mesh Model::processMesh(aiMesh* mesh, const aiScene* scene) {
+Mesh Model::processMesh(aiMesh* mesh, const aiScene* scene, vector<vertex_t>& lightVertices, vector<unsigned int>& lightIndices) {
     // 顶点数据
     vector<Vertex> vertices;
     // 索引数据
@@ -59,11 +59,15 @@ Mesh Model::processMesh(aiMesh* mesh, const aiScene* scene) {
         // 处理网格的顶点
         Vertex vertex;
         glm::vec3 vector;
+        vertex_t lightVertex;
         // 顶点位置
         vector.x = mesh->mVertices[i].x;
         vector.y = mesh->mVertices[i].y;
         vector.z = mesh->mVertices[i].z;
         vertex.Position = vector;
+        lightVertex.p[0] = vector.x;
+        lightVertex.p[1] = vector.y;
+        lightVertex.p[2] = vector.z;
         // 顶点法线
         if (mesh->HasNormals()) {
             vector.x = mesh->mNormals[i].x;
@@ -77,9 +81,13 @@ Mesh Model::processMesh(aiMesh* mesh, const aiScene* scene) {
             vec.x = mesh->mTextureCoords[0][i].x;
             vec.y = mesh->mTextureCoords[0][i].y;
             vertex.TexCoords = vec;
+            lightVertex.t[0] = vec.x;
+            lightVertex.t[1] = vec.y;
         }
         else {
             vertex.TexCoords = glm::vec2(0.0f, 0.0f);
+            lightVertex.t[0] = 0.0f;
+            lightVertex.t[1] = 0.0f;
         }
         // 切线
         vector.x = mesh->mTangents[i].x;
@@ -97,6 +105,7 @@ Mesh Model::processMesh(aiMesh* mesh, const aiScene* scene) {
         vertex.Bitangent = vector;
 
         vertices.push_back(vertex);
+        lightVertices.push_back(lightVertex);
     }
 
     // 处理网格的索引(服了，一开始把这步操作写在处理顶点的循环里面了，怪不得导入某些模型内存oom了)
@@ -104,6 +113,7 @@ Mesh Model::processMesh(aiMesh* mesh, const aiScene* scene) {
         aiFace face = mesh->mFaces[i];
         for (unsigned int j = 0; j < face.mNumIndices; j++) {
             indices.push_back(face.mIndices[j]);
+            lightIndices.push_back(face.mIndices[j]);
         }
     }
 

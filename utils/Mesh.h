@@ -64,7 +64,7 @@ public:
     }
 
     // 绘制函数
-    void draw(Shader& shader, vector<unsigned int> directionLightDepthMaps, bool isActiveTexture, vector<unsigned int> d_d2_filter_maps, bool is_d_d2) {
+    void draw(Shader& shader, vector<unsigned int> directionLightDepthMaps, bool isActiveTexture, vector<unsigned int> d_d2_filter_maps, bool is_d_d2, bool isLightMap, unsigned int lightMap) {
         // 是否激活纹理
         if (isActiveTexture) {
             unsigned int diffuseNr = 0;
@@ -128,7 +128,13 @@ public:
                     glBindTexture(GL_TEXTURE_2D, d_d2_filter_maps[j * 2 + 1]);
                     shader.setInt("directionalLights[" + std::to_string(j) + "].d_d2_filter", i + j);
                 }
+            }
 
+            if (isLightMap) {
+                // 设置光照贴图
+                glActiveTexture(GL_TEXTURE0 + i + j);
+                glBindTexture(GL_TEXTURE_2D, lightMap);
+                shader.setInt("lightMap", i + j);
             }
         }
 
@@ -168,12 +174,12 @@ private:
         // 顶点位置
         glEnableVertexAttribArray(0);
         glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, sizeof(Vertex), (void*)0);
-        // 法线
-        glEnableVertexAttribArray(1);
-        glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, sizeof(Vertex), (void*)offsetof(Vertex, Normal));
         // 纹理坐标
+        glEnableVertexAttribArray(1);
+        glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, sizeof(Vertex), (void*)offsetof(Vertex, TexCoords));
+        // 法线
         glEnableVertexAttribArray(2);
-        glVertexAttribPointer(2, 2, GL_FLOAT, GL_FALSE, sizeof(Vertex), (void*)offsetof(Vertex, TexCoords));
+        glVertexAttribPointer(2, 3, GL_FLOAT, GL_FALSE, sizeof(Vertex), (void*)offsetof(Vertex, Normal));
         // 切线
         glEnableVertexAttribArray(3);
         glVertexAttribPointer(3, 3, GL_FLOAT, GL_FALSE, sizeof(Vertex), (void*)offsetof(Vertex, Tangent));
